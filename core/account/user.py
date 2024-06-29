@@ -1,16 +1,17 @@
+from .profile import Profile
+
 class User:
-    def __init__(self, username, email, password):
+    def __init__(self, user_id, username, email):
+        self.user_id = user_id
         self.username = username
         self.email = email
-        self.password = password  # Note: In a real application, never store passwords in plain text
-        self.handle = f"@{username}"  # LIVEDICE H@NDLE
-        self.is_active = True
+        self.profile = Profile(user_id, username)
 
-    def deactivate(self):
-        self.is_active = False
+    def get_profile(self):
+        return self.profile
 
-    def activate(self):
-        self.is_active = True
+    def update_profile_stats(self, game_result, score):
+        self.profile.update_stats(game_result, score)
 
-    def __str__(self):
-        return f"User: {self.username} ({self.handle})"
+    def update_last_login(self):
+        self.profile.update_last_login()
