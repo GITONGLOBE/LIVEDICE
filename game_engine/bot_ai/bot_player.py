@@ -1,5 +1,5 @@
 import random
-from dice_game_engine.dice_rules import DiceRules
+from game_engine.dice_game.dice_rules import DiceRules
 
 class BotPlayer:
     def __init__(self, difficulty='medium'):

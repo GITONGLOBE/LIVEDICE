@@ -1,1 +1,1 @@
-from .game_room_system import app as game_room_app, socketio
+from .game_room_ui import GameRoomUI

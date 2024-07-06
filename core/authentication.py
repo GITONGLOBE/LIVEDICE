@@ -1,17 +1,20 @@
-from .account.player_manager import PlayerManager
-
 class AuthenticationSystem:
-    def __init__(self):
-        self.player_manager = PlayerManager()
+    @staticmethod
+    def authenticate_user():
+        # This is a placeholder function. In a real application, you would implement
+        # actual authentication logic here.
+        print("Simulating user authentication...")
+        return {"id": 1, "username": "test_user"}  # Return a dummy user object
 
-    def register(self, username, email, password):
-        return self.player_manager.register_player(username, email, password)
+    @staticmethod
+    def login(username, password):
+        # Placeholder login function
+        print(f"Attempting to log in user: {username}")
+        # In a real application, you would verify the credentials here
+        return AuthenticationSystem.authenticate_user()
 
-    def login(self, username, password):
-        return self.player_manager.login_player(username, password)
-
-    def get_player(self, user_id):
-        return self.player_manager.get_player(user_id)
-
-    def update_player_stats(self, user_id, game_result, score):
-        return self.player_manager.update_player_stats(user_id, game_result, score)
+    @staticmethod
+    def logout(user):
+        # Placeholder logout function
+        print(f"Logging out user: {user['username']}")
+        # In a real application, you would invalidate the user's session here

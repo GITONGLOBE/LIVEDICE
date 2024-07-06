@@ -1,59 +1,25 @@
-# C:\LIVEDICE\ui\friend_list.py
+import tkinter as tk
+from tkinter import ttk
 
-class FriendListUI:
-    def __init__(self, friend_system):
-        self.friend_system = friend_system
+class FriendList:
+    def __init__(self, master):
+        self.master = master
+        self.create_widgets()
 
-    def display_friend_list(self, user_id):
-        friends = self.friend_system.get_friend_list(user_id)
-        # Implement UI logic to display friend list
-        print(f"Displaying friend list for user {user_id}")
-        for friend in friends:
-            print(f"Friend: {friend['username']}, Status: {friend['status']}")
+    def create_widgets(self):
+        self.friend_list_window = tk.Toplevel(self.master)
+        self.friend_list_window.title("Friend List")
+        self.friend_list_window.geometry("300x400")
 
-    def send_friend_request_ui(self, sender_id):
-        # Implement UI logic for sending friend requests
-        receiver_id = input("Enter the user ID of the friend you want to add: ")
-        if self.friend_system.send_friend_request(sender_id, receiver_id):
-            print("Friend request sent successfully")
-        else:
-            print("Failed to send friend request")
+        self.friend_listbox = tk.Listbox(self.friend_list_window)
+        self.friend_listbox.pack(expand=True, fill='both', padx=10, pady=10)
 
-    def handle_friend_request_ui(self, receiver_id):
-        # Implement UI logic for handling incoming friend requests
-        sender_id = input("Enter the user ID of the friend request you want to accept: ")
-        if self.friend_system.accept_friend_request(sender_id, receiver_id):
-            print("Friend request accepted")
-        else:
-            print("Failed to accept friend request")
+        # Placeholder for friend list population
+        self.populate_friend_list()
 
-    def search_friends_ui(self, user_id):
-        # Implement UI logic for searching friends
-        query = input("Enter a username to search for: ")
-        results = self.friend_system.search_friends(user_id, query)
-        print(f"Search results for '{query}':")
-        for friend in results:
-            print(f"Friend: {friend['username']}, Status: {friend['status']}")
-
-# Add a main function for testing
-def main():
-    from core.friend_system import FriendSystem
-    from core.user_management import UserManager
-    
-    user_manager = UserManager()
-    friend_system = FriendSystem(user_manager)
-    ui = FriendListUI(friend_system)
-    
-    # Add some test users
-    user_manager.create_user("user1", "alice@example.com", "password")
-    user_manager.create_user("user2", "bob@example.com", "password")
-    user_manager.create_user("user3", "charlie@example.com", "password")
-    
-    # Test the UI functions
-    ui.send_friend_request_ui("user1")
-    ui.handle_friend_request_ui("user2")
-    ui.display_friend_list("user1")
-    ui.search_friends_ui("user1")
-
-if __name__ == "__main__":
-    main()
+    def populate_friend_list(self):
+        # This method should be implemented to populate the friend list
+        # For now, we'll just add some dummy data
+        dummy_friends = ["Friend 1", "Friend 2", "Friend 3"]
+        for friend in dummy_friends:
+            self.friend_listbox.insert(tk.END, friend)
