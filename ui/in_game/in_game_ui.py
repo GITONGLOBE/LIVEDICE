@@ -23,12 +23,14 @@ class InGameUI(UIInterface):
         self.WINDOW_WIDTH = 1920
         self.WINDOW_HEIGHT = 1080
         self.screen = pygame.display.set_mode((self.WINDOW_WIDTH, self.WINDOW_HEIGHT))
-        pygame.display.set_caption("• LIVEDICE [ F ]")
+        pygame.display.set_caption("• LIVEDICE [ IF ]")
+
+        self.setup_colors()  # Add this line here
+        self.screen.fill(self.RED)
 
         self.human_players = human_players
         self.ai_players = ai_players
-        self.game_state = None  # We'll initialize this later
-        self.dice_rects: List[pygame.Rect] = []
+        self.setup_game()  # Move this line up
         self.setup_ui_components()
         self.setup_fonts()
         self.setup_stash_section()
@@ -41,6 +43,8 @@ class InGameUI(UIInterface):
         self.setup_bust_button()
         self.setup_banked_turn_summary_button()
 
+        self.bank_button = None
+        self.bank_button_enabled = False
 
         self.buttons = {}
 
@@ -57,6 +61,26 @@ class InGameUI(UIInterface):
         self.dicecupstartturn_mask = self.dicecup_mask.copy()
         self.dicecupstartturn_rect = self.dicecup_rect.copy()
         self.use_start_turn_button = True
+
+        self.snaptray_color = "red"
+        self.snaptray_images = {
+            "red": pygame.image.load(os.path.join("assets", "snaptray_lineart_red.png")).convert_alpha(),
+            "blue": pygame.image.load(os.path.join("assets", "snaptray_lineart_blue.png")).convert_alpha(),
+            "green": pygame.image.load(os.path.join("assets", "snaptray_lineart_green.png")).convert_alpha()
+        }
+        self.snaptray_overlay = self.snaptray_images["red"]
+
+
+        # Create color change buttons
+        button_size = 30
+        spacing = 10
+        start_x = self.sections["SNAPTRAY"].right - (button_size + spacing) * 5  # Moved further left
+        start_y = self.sections["SNAPTRAY"].bottom - button_size - spacing
+        self.color_buttons = {
+            "red": Button(start_x, start_y, button_size, button_size, "", (255, 0, 0), (255, 255, 255), (255, 0, 0), (255, 0, 0)),
+            "green": Button(start_x + button_size + spacing, start_y, button_size, button_size, "", (0, 255, 0), (255, 255, 255), (0, 255, 0), (0, 255, 0)),
+            "blue": Button(start_x + (button_size + spacing) * 2, start_y, button_size, button_size, "", (0, 0, 255), (255, 255, 255), (0, 0, 255), (0, 0, 255))
+        }
 
         # Initialize scrolling variables
         self.log_scroll_y = 0
@@ -121,6 +145,7 @@ class InGameUI(UIInterface):
         self.MAGENTA = (255, 0, 255)
         self.ORANGE = (255, 165, 0)
         self.PURPLE = (128, 0, 128)
+        self.GRAY = (128, 128, 128) 
 
     def setup_sections(self):
         self.sections = {
@@ -130,12 +155,12 @@ class InGameUI(UIInterface):
             "RIGHTPANEL": pygame.Rect(1440, 0, 480, 1080),
             
             # Updated and New Sections
-            "GAME_INFO": pygame.Rect(20, 20, 140, 200),
-            "LEADERBOARD_STANDING": pygame.Rect(180, 20, 280, 200),
-            "LEADERBOARD_SCORE": pygame.Rect(20, 240, 280, 400),
-            "RT_STATS": pygame.Rect(320, 240, 140, 240),
-            "BANK_BUTTON": pygame.Rect(320, 480, 140, 160),
-            "STASH": pygame.Rect(20, 660, 440, 240),
+            "GAME_INFO": pygame.Rect(20, 20, 160, 200),
+            "LEADERBOARD_STANDING": pygame.Rect(180, 20, 280, 200), 
+            "LEADERBOARD_SCORE": pygame.Rect(20, 280, 260, 280), 
+            "RT_STATS": pygame.Rect(280, 280, 180, 360), 
+            "BANK_BUTTON": pygame.Rect(20, 560, 260, 80), 
+            "STASH": pygame.Rect(20, 640, 440, 240),
             "STASHSTASH": pygame.Rect(20, 920, 440, 140),
             "SNAPTRAY": pygame.Rect(480, 0, 960, 1080),
             "DICECUP": pygame.Rect(1460, 20, 440, 400),
@@ -146,12 +171,12 @@ class InGameUI(UIInterface):
             "READY_UP_POPUP": pygame.Rect(800, 460, 320, 160),
             "TURN_BUST_POPUP": pygame.Rect(800, 460, 320, 160),
             "END_GAME_SUMMARY_POPUP": pygame.Rect(660, 290, 600, 500),
-            "NOW_PLAYING_PLAYER_POPUP": pygame.Rect(520, 20, 300, 100)
+            "NOW_PLAYING_PLAYER_POPUP": pygame.Rect(20, 220, 440, 60),
         }
         self.section_colors = {
             "LEFTPANEL": (204, 0, 0),  # #CC0000
-            "CENTRALPANEL": (255, 255, 255),  # White
-            "RIGHTPANEL": (204, 0, 0),  # #CC0000
+            "CENTRALPANEL": (255, 255, 255),  #FF0000
+            "RIGHTPANEL": (204, 0, 0),  #CC0000
             "GAME_INFO": (0, 0, 255),  # #0000FF
             "LEADERBOARD_STANDING": (0, 0, 170),  # #0000AA
             "LEADERBOARD_SCORE": (0, 0, 255),  # #0000FF
@@ -164,7 +189,7 @@ class InGameUI(UIInterface):
             "READY_UP_POPUP": (0, 0, 255),  # #0000FF
             "TURN_BUST_POPUP": (0, 0, 255),  # #0000FF
             "END_GAME_SUMMARY_POPUP": (0, 0, 255),  # #0000FF
-            "NOW_PLAYING_PLAYER_POPUP": (255, 0, 0),  # #FF0000
+            "NOW_PLAYING_PLAYER_POPUP": (255, 0, 255),  # Bright purple
         }
         for key in self.sections:
             if key not in self.section_colors:
@@ -178,7 +203,7 @@ class InGameUI(UIInterface):
 
     def setup_fonts(self):
         font_path = os.path.join("assets", "open-sauce-two")
-        font_sizes = [16, 18, 20, 22, 24, 28, 36]  # Added size 20
+        font_sizes = [10, 12, 14, 16, 18, 20, 22, 24, 28, 36]  # Added smaller sizes
         font_styles = [
             'black', 'black_italic', 'bold', 'bold_italic', 'extra_bold',
             'extra_bold_italic', 'italic', 'light', 'light_italic', 'medium',
@@ -228,11 +253,11 @@ class InGameUI(UIInterface):
 
     def setup_stash_section(self):
         stash_rect = self.sections["STASH"]
-        self.stash_plank = StashPlank(pygame.Rect(stash_rect.left, stash_rect.top, stash_rect.width, stash_rect.height), self.fonts['regular'][16])
-
+        self.stash_plank = StashPlank(pygame.Rect(stash_rect.left, stash_rect.top, 440, 240), self.fonts, self.game_state)
+                
     def setup_stashstash_section(self):
         stashstash_rect = self.sections["STASHSTASH"]
-        self.stash_stash = StashStash(pygame.Rect(stashstash_rect.left, stashstash_rect.top, stashstash_rect.width, stashstash_rect.height), self.fonts['regular'][16])
+        self.stash_stash = StashStash(pygame.Rect(stashstash_rect.left, stashstash_rect.top, stashstash_rect.width, stashstash_rect.height), self.fonts['regular'][16], self.game_state)
 
     def setup_rotating_image(self):
         image_path = os.path.join("assets", "PRECISE-G-154x154.png")
@@ -249,10 +274,10 @@ class InGameUI(UIInterface):
         )
 
     def setup_start_turn_button(self):
-        snaptray_rect = self.sections["SNAPTRAY"]
+        popup_rect = self.sections["READY_UP_POPUP"]
         self.start_turn_button = Button(
-            snaptray_rect.right - 120, snaptray_rect.top + 10,
-            110, 30, "START TURN", (0, 0, 255), (255, 255, 255), (0, 0, 255), (255, 255, 255)
+            popup_rect.centerx - 100, popup_rect.centery - 20,
+            200, 40, "LET'S GO!", (0, 0, 255), (255, 255, 255), (0, 0, 255), (255, 255, 255)
         )
 
     def setup_bust_button(self):
@@ -303,32 +328,7 @@ class InGameUI(UIInterface):
             self.update_leaderboard_scroll()
 
     def update_bank_button(self):
-        current_state = self.game_state.current_game_state
-        referee = self.game_state.referee
-
-        if current_state in [GameStateEnum.ROLLRESULT_POSITIVE_STASHOPTIONS, 
-                            GameStateEnum.ROLLRESULT_POSITIVE_STASHOPTIONS_HAVESTASHED,
-                            GameStateEnum.ROLLRESULT_POSITIVE_STASHSELECTION_PARTIAL, 
-                            GameStateEnum.ROLLRESULT_POSITIVE_STASHSELECTION_FULL,
-                            GameStateEnum.ROLLRESULT_POSITIVE_STASHOPTIONS_NOSTASH,
-                            GameStateEnum.STASHCHOICE_STASHED_ALL, 
-                            GameStateEnum.STASHCHOICE_STASHED_PARTIAL]:
-            self.bank_button.set_text(referee.get_bank_button_text())
-            self.bank_button.enabled = True
-        else:
-            self.bank_button.enabled = False
-
-    def update_start_turn_button(self):
-        current_state = self.game_state.current_game_state
-
-        if current_state in [GameStateEnum.START_TURN, GameStateEnum.NEXTUP_READYUP]:
-            self.start_turn_button.set_text(f"LET'S GO {self.game_state.current_player.user.username}!")
-            self.start_turn_button.enabled = True
-        elif current_state == GameStateEnum.NEW_STASH:
-            self.start_turn_button.set_text("ROLL NOW FOR NEW STASH!")
-            self.start_turn_button.enabled = True
-        else:
-            self.start_turn_button.enabled = False
+        self.bank_button_enabled = self.game_state.referee.can_bank()
 
     def update_stash_button(self):
         current_state = self.game_state.current_game_state
@@ -346,6 +346,15 @@ class InGameUI(UIInterface):
             self.stash_plank.set_button_text("")
             self.stash_plank.button_enabled = False
 
+    def update_stash_stash_button(self):
+        current_state = self.game_state.current_game_state
+
+        if current_state == GameStateEnum.STASHCHOICE_STASHED_FULL:
+            self.stash_stash.set_button_text("CLICK HERE TO MOVE FULL STASH INTO STASHSTASH")
+            self.stash_stash.button_enabled = True
+        else:
+            self.stash_stash.button_enabled = False
+
     def update_bust_button(self):
         self.bust_button.enabled = self.game_state.current_game_state == GameStateEnum.BUST_TURN_SUMMARY
 
@@ -361,6 +370,18 @@ class InGameUI(UIInterface):
         else:
             self.stash_stash.button_enabled = False
 
+    def update_start_turn_button(self):
+        current_state = self.game_state.current_game_state
+
+        if current_state in [GameStateEnum.START_TURN, GameStateEnum.NEXTUP_READYUP]:
+            self.start_turn_button.set_text(f"LET'S GO {self.game_state.current_player.user.username}!")
+            self.start_turn_button.enabled = True
+        elif current_state == GameStateEnum.NEW_STASH:
+            self.start_turn_button.set_text("ROLL NOW FOR NEW STASH!")
+            self.start_turn_button.enabled = True
+        else:
+            self.start_turn_button.enabled = False
+
     def update_leaderboard(self):
         current_player = self.game_state.current_player
         turn_score = self.game_state.real_time_counters.turn_vscore
@@ -370,7 +391,7 @@ class InGameUI(UIInterface):
         current_player.record_turn(self.game_state.current_turn_number, turn_score, rolls, stashes)
         self.game_state.total_turns += 1
         
-        log_entry = f"{current_player.user.username} scored {turn_score} points in turn {self.game_state.current_turn_number} with {rolls} rolls and {stashes} stashes"
+        log_entry = f"{current_player.user.username} scored {self.format_number(turn_score)} points in turn {self.format_number(self.game_state.current_turn_number)} with {self.format_number(rolls)} rolls and {self.format_number(stashes)} stashes"
         self.game_state.add_log_entry(log_entry)
 
     def update_leaderboard_scroll(self):
@@ -379,15 +400,21 @@ class InGameUI(UIInterface):
         self.leaderboard_scroll_y = max(0, total_lines - visible_lines)
 
     def draw(self):
-        self.screen.fill(self.WHITE)
+        # Fill the entire screen with red
+        self.screen.fill(self.RED)
         
         # Draw background panel sections
         for section in ["LEFTPANEL", "CENTRALPANEL", "RIGHTPANEL"]:
             pygame.draw.rect(self.screen, self.section_colors[section], self.sections[section])
-        
+ 
+        # Draw the snaptray overlay
+        snaptray_rect = self.sections["SNAPTRAY"]
+        print(f"Drawing snaptray overlay: color={self.snaptray_color}, rect={snaptray_rect}")  # Debug print
+        self.screen.blit(self.snaptray_overlay, snaptray_rect.topleft)
+
         # Draw other sections
         for section, rect in self.sections.items():
-            if section not in ["LEFTPANEL", "CENTRALPANEL", "RIGHTPANEL", "READY_UP_POPUP", "TURN_BUST_POPUP", "END_GAME_SUMMARY_POPUP", "NOW_PLAYING_PLAYER_POPUP"]:
+            if section not in ["LEFTPANEL", "CENTRALPANEL", "RIGHTPANEL", "SNAPTRAY", "READY_UP_POPUP", "TURN_BUST_POPUP", "END_GAME_SUMMARY_POPUP", "NOW_PLAYING_PLAYER_POPUP"]:
                 pygame.draw.rect(self.screen, self.section_colors[section], rect)
                 self.draw_section_content(section, rect)
         
@@ -402,18 +429,21 @@ class InGameUI(UIInterface):
 
         gameloop_text = f"CURRENT GAMELOOP: {self.game_state.current_game_state.name}"
         gameloop_font = self.fonts['regular'][24]
-        gameloop_surface = gameloop_font.render(gameloop_text, True, (255, 0, 0))  # Red color
+        gameloop_surface = gameloop_font.render(gameloop_text, True, (255, 0, 0))  # Red color 00
         gameloop_rect = gameloop_surface.get_rect(center=(self.WINDOW_WIDTH // 2, 20))
         self.screen.blit(gameloop_surface, gameloop_rect)
         
-        self.bank_button.draw(self.screen)
-        self.start_turn_button.draw(self.screen)
+        if self.should_draw_popup("READY_UP_POPUP"):
+            self.start_turn_button.draw(self.screen)
 
         if self.game_state.current_game_state == GameStateEnum.BUST_TURN_SUMMARY:
             self.bust_button.draw(self.screen)
 
         elif self.game_state.current_game_state == GameStateEnum.BANKED_TURN_SUMMARY:
             self.banked_turn_summary_button.draw(self.screen)
+
+        if self.game_state.current_game_state == GameStateEnum.END_GAME_SUMMARY:
+            self.draw_end_game_summary()
 
         self.scoring_info_button.draw(self.screen)
         
@@ -422,6 +452,10 @@ class InGameUI(UIInterface):
             if self.should_draw_popup(section):
                 pygame.draw.rect(self.screen, self.section_colors[section], self.sections[section])
                 self.draw_section_content(section, self.sections[section])
+
+        # Draw color change buttons
+        for button in self.color_buttons.values():
+            button.draw(self.screen)
 
         pygame.display.update()
     
@@ -435,6 +469,14 @@ class InGameUI(UIInterface):
         elif popup_name == "NOW_PLAYING_PLAYER_POPUP":
             return True  # Always show the current player
         return False
+
+    def draw_now_playing_popup(self, rect: pygame.Rect):
+        pygame.draw.rect(self.screen, (0, 187, 0), rect)  # #00BB00
+        
+        self.draw_text_on_surface("NOW PLAYING", self.screen, (rect.left + 10, rect.centery), self.WHITE, 'black_italic', 16, align='left')
+        
+        current_player = self.game_state.current_player
+        self.draw_text_on_surface(current_player.user.username, self.screen, (rect.right - 10, rect.centery), self.WHITE, 'extra_bold', 24, align='right')
 
     def draw_scrollable_log(self, rect: pygame.Rect):
         MAX_LOG_ENTRIES = 100
@@ -469,6 +511,22 @@ class InGameUI(UIInterface):
 
         self.screen.blit(log_surface, rect)
 
+    def draw_end_game_summary(self):
+        if self.game_state.current_game_state == GameStateEnum.END_GAME_SUMMARY:
+            summary_rect = self.sections["END_GAME_SUMMARY_POPUP"]
+            pygame.draw.rect(self.screen, self.section_colors["END_GAME_SUMMARY_POPUP"], summary_rect)
+            
+            winner = self.game_state.get_winner()
+            if winner:
+                winner_text = f"{winner.user.username} WINS!"
+                score_text = f"SCORE: {self.game_state.format_number(winner.get_total_score())}"
+                
+                self.draw_text_on_surface(winner_text, self.screen, (summary_rect.centerx, summary_rect.top + 50), self.WHITE, 'extra_bold', 36, align='center')
+                self.draw_text_on_surface(score_text, self.screen, (summary_rect.centerx, summary_rect.top + 100), self.WHITE, 'bold', 24, align='center')
+            
+            restart_button = Button(summary_rect.centerx - 100, summary_rect.bottom - 70, 200, 40, "RESTART GAME", self.GREEN, self.BLACK, self.GREEN, self.BLACK)
+            restart_button.draw(self.screen)
+
     def get_entry_height(self, entry, max_width):
         words = entry.split()
         x = 0
@@ -477,19 +535,19 @@ class InGameUI(UIInterface):
             if word.startswith("<DICE>") and word.endswith("</DICE>"):
                 word_width = 36
             else:
-                word_width = self.log_font.size(word)[0]
+                word_width = self.fonts['regular'][16].size(word)[0]
             if x + word_width > max_width:
                 lines += 1
                 x = word_width
             else:
                 x += word_width + 5
-        return lines * (self.log_font.get_height() + 5) + 15  # Increased padding between entries
+        return lines * (self.fonts['regular'][16].get_height() + 2) + 10  # 10px space under each entry
         
     def render_log_line(self, surface, line, x, y):
         words = line.split()
         start_x = x
         max_width = surface.get_width() - 30
-        line_height = self.log_font.get_height() + 5
+        line_height = self.fonts['regular'][16].get_height() + 5
 
         for i, word in enumerate(words):
             if word.startswith("<DICE>") and word.endswith("</DICE>"):
@@ -501,26 +559,26 @@ class InGameUI(UIInterface):
                 x = self.dice_renderer.render_dice_in_log(surface, dice_info, x, y)
             elif word.startswith("<prefix>") and word.endswith("</prefix>"):
                 prefix = word[8:-9]
-                word_surface = self.log_font.render(prefix, True, self.WHITE)
+                word_surface = self.fonts['regular'][16].render(prefix, True, self.WHITE)
                 word_width = word_surface.get_width()
-                prefix_rect = pygame.Rect(x, y, word_width, self.log_font.get_height())
+                prefix_rect = pygame.Rect(x, y, word_width, self.fonts['regular'][16].get_height())
                 pygame.draw.rect(surface, self.BLUE, prefix_rect)
                 surface.blit(word_surface, (x, y))
                 x += word_width + 5
-            elif word.startswith("<player>") and word.endswith("</player>") or word.startswith("@GO-BOT-"):
+            elif word.startswith("<player>") and word.endswith("</player>") or word.startswith("@GO-BOT-") or word.startswith("@VIDEO-GAMER-"):
                 player = word[8:-9] if word.startswith("<player>") else word
-                word_surface = self.log_font.render(player, True, self.GREEN)
+                word_surface = self.fonts['bold'][16].render(player, True, self.GREEN)
                 word_width = word_surface.get_width()
                 surface.blit(word_surface, (x, y))
                 x += word_width + 5
             elif word.startswith("<green>") and word.endswith("</green>"):
                 green_text = word[7:-8]
-                word_surface = self.log_font.render(green_text, True, self.GREEN)
+                word_surface = self.fonts['regular'][16].render(green_text, True, self.GREEN)
                 word_width = word_surface.get_width()
                 surface.blit(word_surface, (x, y))
                 x += word_width + 5
             else:
-                word_surface = self.log_font.render(word, True, self.BLACK)
+                word_surface = self.fonts['regular'][16].render(word, True, self.WHITE)  # Changed to WHITE
                 word_width = word_surface.get_width()
                 if x + word_width > max_width:
                     x = start_x
@@ -560,15 +618,16 @@ class InGameUI(UIInterface):
             self.log_scroll_y = max(0, self.log_scroll_y - self.log_line_height)
         elif event.button == 5:  # Scroll down
             formatted_log = [self.format_log_entry(entry) for entry in self.game_state.game_log]
-            total_height = sum(len(self.wrap_text(entry, self.sections["GAME_DATA_LOG"].width - 20, return_lines=True)) for entry in formatted_log)
-            max_scroll = max(0, total_height * self.log_line_height - self.sections["GAME_DATA_LOG"].height)
+            total_height = sum(self.get_entry_height(entry, self.sections["GAME_DATA_LOG"].width - 20) for entry in formatted_log)
+            max_scroll = max(0, total_height - self.sections["GAME_DATA_LOG"].height)
             self.log_scroll_y = min(max_scroll, self.log_scroll_y + self.log_line_height)
         self.log_auto_scroll = False
 
     def scroll_log_to_bottom(self):
         formatted_log = [self.format_log_entry(entry) for entry in self.game_state.game_log]
-        total_height = sum(len(self.wrap_text(entry, self.sections["GAME_DATA_LOG"].width - 20, return_lines=True)) for entry in formatted_log)
-        max_scroll = max(0, total_height * self.log_line_height - self.sections["GAME_DATA_LOG"].height)
+        total_height = sum(self.get_entry_height(entry, self.sections["GAME_DATA_LOG"].width - 20) for entry in formatted_log)
+        visible_height = self.sections["GAME_DATA_LOG"].height
+        max_scroll = max(0, total_height - visible_height)
         self.log_scroll_y = max_scroll
 
     def scroll_log_up(self):
@@ -609,53 +668,133 @@ class InGameUI(UIInterface):
             self.leaderboard_scroll_y = min(max_scroll, max(0, self.leaderboard_scroll_y))
 
     def draw_rt_stats(self, rect: pygame.Rect):
-        pygame.draw.rect(self.screen, self.section_colors["RT_STATS"], rect)
+        stats_surface = pygame.Surface((rect.width, rect.height))
+        stats_surface.fill(self.section_colors["RT_STATS"])
         
-        title_font = self.fonts['bold'][24]
-        normal_font = self.fonts['regular'][18]
-        small_font = self.fonts['regular'][16]
+        self.draw_text_on_surface("REAL-TIME STATS", stats_surface, (10, 5), self.WHITE, 'black_italic', 10, 'left')
         
-        # RT_STATS Status
-        status_text = f"Game State: {self.game_state.current_game_state.name}"
-        self.draw_text_on_surface(status_text, self.screen, (rect.left + 10, rect.top + 10), self.BLACK, 'bold', 24)
+        y = 25  # Starting y position for the main content
         
-        # Current Turn Info
         current_player = self.game_state.current_player
         turn_info = [
-            f"Player: {current_player.user.username}",
-            f"Turn: {self.game_state.current_turn_number}",
-            f"Rolls: {current_player.roll_count}",
-            f"Stash: {current_player.get_stash_score()} pts ({len(current_player.stashed_dice)} dice)",
-            f"Stash Stash: {current_player.stash_stash} pts ({current_player.full_stashes_moved_this_turn} stashes)",
-            f"Turn Score: {self.game_state.real_time_counters.turn_vscore} pts",
-            f"Total Banked Stashes: {current_player.get_total_banked_full_stashes()}"
+            ("TURN\nNUMBER", self.game_state.format_number(self.game_state.current_turn_number)),
+            ("ROLLS\nROLLED", self.game_state.format_number(current_player.roll_count)),
+            ("STASH\nNUMBER", self.game_state.referee.get_stash_number()),
+            ("STASH\nTOTAL", self.game_state.format_number(current_player.get_stash_score())),
+            ("STASHSTASH\nTOTAL", self.game_state.format_number(current_player.stash_stash)),
+            ("VIRTUAL\nGAME SCORE", self.game_state.format_number(self.game_state.referee.calculate_total_score())),
+            ("VIRTUAL\nGAME RANK", self.game_state.format_number(self.get_virtual_rank())),
+            ("VIRTUAL\nTURN\nSCORE", self.game_state.format_number(self.game_state.referee.calculate_turn_score()))
         ]
         
-        for i, info in enumerate(turn_info):
-            self.draw_text_on_surface(info, self.screen, (rect.left + 10, rect.top + 40 + i * 25), self.BLACK, 'regular', 16)
+        for label, value in turn_info:
+            label_lines = label.split('\n')
+            label_height = len(label_lines) * self.fonts['black_italic'][10].get_linesize()
+            
+            for i, line in enumerate(label_lines):
+                label_surface = self.fonts['black_italic'][10].render(line, True, self.WHITE)
+                label_rect = label_surface.get_rect(topleft=(10, y + i * self.fonts['black_italic'][10].get_linesize()))
+                stats_surface.blit(label_surface, label_rect)
+            
+            value_surface = self.fonts['extra_bold'][24].render(value, True, self.GREEN)
+            value_rect = value_surface.get_rect(topright=(rect.width - 10, y + (label_height - value_surface.get_height()) // 2))
+            stats_surface.blit(value_surface, value_rect)
+            
+            y += max(label_height, value_surface.get_height()) + 10  # Adjust spacing between rows
 
+        self.screen.blit(stats_surface, rect)
+
+    def get_virtual_rank(self):
+        current_player = self.game_state.current_player
+        virtual_score = self.game_state.referee.calculate_total_score()
+        
+        # Create a list of all players' scores, including the virtual score
+        all_scores = [player.get_total_score() for player in self.game_state.players]
+        all_scores[self.game_state.players.index(current_player)] = virtual_score
+        
+        # Sort scores in descending order
+        sorted_scores = sorted(all_scores, reverse=True)
+        
+        # Find the rank of the current player's virtual score
+        rank = sorted_scores.index(virtual_score) + 1
+        
+        return rank
 
     def draw_game_info(self, rect: pygame.Rect):
-        pygame.draw.rect(self.screen, self.section_colors["GAME_INFO"], rect)
+        info_surface = pygame.Surface((rect.width, rect.height))
+        info_surface.fill(self.section_colors["GAME_INFO"])
         
-        font = self.fonts['regular'][24]
+        self.draw_text_on_surface("GAME IN SESSION", info_surface, (10, 5), self.WHITE, 'black_italic', 10, 'left')
         
-        info_text = [
-            "• LIVEDICE [ IF ]",
-            "",
-            "COREGAME",
-            "6DICE",
-            "FIRST TO 4OOO"
-        ]
+        y = 25  # Starting y position for the main content
         
-        for i, line in enumerate(info_text):
-            text_surface = font.render(line, True, self.BLACK)
-            text_rect = text_surface.get_rect(centerx=rect.centerx, top=rect.top + 20 + i * 30)
-            self.screen.blit(text_surface, text_rect)
+        # Draw the LIVEDICE [ IF ] text with different colors and styles
+        x = 10
+        bullet_y = y + (self.fonts['medium'][16].get_height() - self.fonts['black'][20].get_height()) // 2
+        self.draw_text_on_surface("•", info_surface, (x, bullet_y), self.RED, 'black', 20, 'left')
+        x += self.fonts['black'][20].size("• ")[0]  # Add space after bullet
+        self.draw_text_on_surface("LIVE", info_surface, (x, y), self.WHITE, 'medium', 16, 'left')
+        x += self.fonts['medium'][16].size("LIVE")[0]
+        self.draw_text_on_surface("DICE", info_surface, (x, y), self.WHITE, 'black', 16, 'left')
+        x += self.fonts['black'][16].size("DICE ")[0]  # Add space after DICE
+        self.draw_text_on_surface("[ IF ]", info_surface, (x, y), self.GREEN, 'black', 16, 'left')
+        
+        y += 50  # Move to the next line and add an empty line
+        
+        # Draw COREGAME
+        x = 10
+        self.draw_text_on_surface("CORE", info_surface, (x, y), self.WHITE, 'black', 14, 'left')
+        x += self.fonts['black'][14].size("CORE")[0]
+        self.draw_text_on_surface("GAME", info_surface, (x, y), self.WHITE, 'medium', 14, 'left')
+        
+        y += 25  # Move to the next line
+        
+        # Draw 6DICE
+        x = 10
+        self.draw_text_on_surface("6", info_surface, (x, y), self.WHITE, 'medium', 14, 'left')
+        x += self.fonts['medium'][14].size("6")[0]
+        self.draw_text_on_surface("DICE", info_surface, (x, y), self.WHITE, 'black', 14, 'left')
+        
+        y += 25  # Move to the next line
+        
+        # Draw FIRST TO 4OOO
+        x = 10
+        self.draw_text_on_surface("FIRST TO", info_surface, (x, y), self.WHITE, 'medium', 14, 'left')
+        x += self.fonts['medium'][14].size("FIRST TO ")[0]
+        self.draw_text_on_surface(self.format_number("4OOO"), info_surface, (x, y), self.WHITE, 'black', 14, 'left')
+
+        self.screen.blit(info_surface, rect)
+
+    def get_bank_button_text(self):
+        virtual_score = self.calculate_virtual_score()
+        return f"BANK {self.format_number(virtual_score)} POINTS\n" \
+            f"TABLE: {self.format_number(self.game_state.real_time_counters.table_vscore)} / " \
+            f"STASH: {self.format_number(self.game_state.real_time_counters.stash_vscore)} / " \
+            f"STASH STASH: {self.format_number(self.game_state.real_time_counters.stashstash_vscore)}"
+
+    def get_full_stash_button_text(self):
+        stash_points = self.game_state.real_time_counters.stash_vscore
+        return f"FULL STASH\nMOVE {self.format_number(stash_points)} POINTS TO STASH STASH\nSTART {self.get_next_stash_number()} STASH"
 
     def draw_bank_button(self, rect: pygame.Rect):
-        pygame.draw.rect(self.screen, self.section_colors["BANK_BUTTON"], rect)
-        # The actual button is drawn separately, this is just the section for it
+        button_rect = rect.copy()
+        pygame.draw.rect(self.screen, (0, 255, 0), button_rect)  # #00FF00
+        
+        virtual_score = self.game_state.referee.calculate_turn_score()
+        button_text = f"BANK {self.game_state.format_number(virtual_score)} POINTS"
+        
+        # Fit text inside button
+        available_sizes = sorted([size for size in self.fonts['extra_bold'].keys() if size <= 36], reverse=True)
+        for font_size in available_sizes:
+            font = self.fonts['extra_bold'][font_size]
+            text_surface = font.render(button_text, True, self.BLACK)
+            if text_surface.get_width() < button_rect.width - 20 and text_surface.get_height() < button_rect.height - 20:
+                break
+        
+        text_rect = text_surface.get_rect(center=button_rect.center)
+        self.screen.blit(text_surface, text_rect)
+
+        self.bank_button = button_rect  # Update the bank_button attribute for click detection
 
     def draw_stash(self, rect: pygame.Rect):
         pygame.draw.rect(self.screen, self.section_colors["STASH"], rect)
@@ -669,51 +808,46 @@ class InGameUI(UIInterface):
         leaderboard_surface = pygame.Surface((rect.width, rect.height))
         leaderboard_surface.fill(self.section_colors["LEADERBOARD_SCORE"])
 
-        header_font = self.fonts['bold'][24]
-        normal_font = self.fonts['regular'][24]
-        small_font = self.fonts['regular'][18]
-        large_font = self.fonts['bold'][36]
+        self.draw_text_on_surface("SCOREBOARD", leaderboard_surface, (10, 5), self.WHITE, 'black_italic', 10, 'left')
 
         current_player = self.game_state.current_player
-        
-        header_text = header_font.render("CURRENT PLAYER", True, self.BLACK)
-        leaderboard_surface.blit(header_text, (10, 5))
 
-        player_name_text = normal_font.render(current_player.user.username, True, (0, 255, 0))
-        leaderboard_surface.blit(player_name_text, (10, 35))
-
-        column_widths = [40, 100, 40, 40]
-        pygame.draw.line(leaderboard_surface, self.BLACK, (0, 60), (rect.width, 60), 2)
-        
-        headers = ["TURN", "SCORE", "R", "S"]
+        column_widths = [40, 120, 40, 40]
+        headers = ["TRN", "SCORE", "R", "S"]
         x_offset = 10
+        y = 20
+
         for header, width in zip(headers, column_widths):
-            self.draw_text_on_surface(header, leaderboard_surface, (x_offset, 70), self.BLACK, 'regular', 18)
+            self.draw_text_on_surface(header, leaderboard_surface, (x_offset, y), self.WHITE, 'black_italic', 10, 'left')
             x_offset += width
 
-        visible_lines = (rect.height - 140) // self.leaderboard_line_height
+        y += 15  # Add some space between headers and content
+
+        visible_lines = (rect.height - 80) // 25  # Adjusted for new starting position
         total_turns = self.game_state.current_turn_number
         start_index = max(1, total_turns - visible_lines + 1)
         end_index = total_turns + 1
 
         for turn in range(start_index, end_index):
-            y = 100 + (turn - start_index) * self.leaderboard_line_height
             turn_data = current_player.get_turn_score(turn)
             
-            x_offset = 10
-            self.draw_text_on_surface(turn, leaderboard_surface, (x_offset + column_widths[0] // 2, y), self.BLACK, 'regular', 18, 'center')
-            x_offset += column_widths[0]
-            
-            self.draw_text_on_surface(turn_data["SCORE"], leaderboard_surface, (x_offset + 5, y), self.WHITE, 'regular', 24)
-            x_offset += column_widths[1]
-            self.draw_text_on_surface(turn_data["ROLLS"], leaderboard_surface, (x_offset + column_widths[2] // 2, y), self.BLACK, 'regular', 18, 'center')
-            x_offset += column_widths[2]
-            self.draw_text_on_surface(turn_data["STASHES"], leaderboard_surface, (x_offset + column_widths[3] // 2, y), self.BLACK, 'regular', 18, 'center')
+            self.draw_text_on_surface(self.format_number(turn), leaderboard_surface, (10, y), self.BLACK, 'extra_bold', 18, 'left')
+            self.draw_text_on_surface(self.format_number(turn_data["SCORE"]), leaderboard_surface, (50, y), self.WHITE, 'extra_bold', 18, 'left')
+            self.draw_text_on_surface(self.format_number(turn_data["ROLLS"]), leaderboard_surface, (170, y), self.BLACK, 'extra_bold', 18, 'left')
+            self.draw_text_on_surface(self.format_number(turn_data["STASHES"]), leaderboard_surface, (210, y), self.BLACK, 'extra_bold', 18, 'left')
+
+            y += 25  # Move to the next row
 
         # Total score
         total_score = current_player.get_total_score()
-        pygame.draw.line(leaderboard_surface, self.BLACK, (0, rect.height - 40), (rect.width, rect.height - 40), 2)
-        self.draw_text_on_surface(f"TOTAL: {total_score}", leaderboard_surface, (10, rect.height - 30), self.WHITE, 'bold', 36)
+        total_rolls = sum(turn_data["ROLLS"] for turn_data in current_player.turn_scores.values())
+        total_stashes = sum(turn_data["STASHES"] for turn_data in current_player.turn_scores.values())
+        
+        y = rect.height - 30
+        self.draw_text_on_surface(f"TTL", leaderboard_surface, (10, y), self.WHITE, 'black_italic', 10, 'left')
+        self.draw_text_on_surface(self.format_number(total_score), leaderboard_surface, (50, y), self.WHITE, 'extra_bold', 18, 'left')
+        self.draw_text_on_surface(self.format_number(total_rolls), leaderboard_surface, (170, y), self.WHITE, 'extra_bold', 18, 'left')
+        self.draw_text_on_surface(self.format_number(total_stashes), leaderboard_surface, (210, y), self.WHITE, 'extra_bold', 18, 'left')
 
         self.screen.blit(leaderboard_surface, rect)
 
@@ -721,20 +855,43 @@ class InGameUI(UIInterface):
         standing_surface = pygame.Surface((rect.width, rect.height))
         standing_surface.fill(self.section_colors["LEADERBOARD_STANDING"])
 
-        header_font = self.fonts['bold'][24]
-        normal_font = self.fonts['regular'][24]
+        self.draw_text_on_surface("LEADERBOARD", standing_surface, (10, 5), self.WHITE, 'black_italic', 10, 'left')
 
-        header_text = header_font.render("STANDINGS", True, self.BLACK)
-        standing_surface.blit(header_text, (10, 5))
+        players_sorted = sorted(self.game_state.players, key=lambda p: self.game_state.referee.get_total_score(p), reverse=True)
+        y = 20  # Starting y position
 
-        players_sorted = sorted(self.game_state.players, key=lambda p: p.get_total_score(), reverse=True)
         for i, player in enumerate(players_sorted):
-            y = 45 + i * 30
-            rank_text = f"{i+1}."
+            rank_text = self.format_number(i+1)
 
-            self.draw_text_on_surface(rank_text, standing_surface, (10, y), self.BLACK, 'regular', 24)
-            self.draw_text_on_surface(player.user.username, standing_surface, (40, y), (0, 255, 0) if player.user.username.startswith("@") else self.BLACK, 'regular', 24)
-            self.draw_text_on_surface(str(player.get_total_score()), standing_surface, (rect.width - 10, y), self.WHITE, 'regular', 24, 'right')
+            if i == 0:
+                font_size = 18
+                row_height = 30
+            elif i == 1:
+                font_size = 16
+                row_height = 26
+            elif i == 2:
+                font_size = 14
+                row_height = 22
+            else:
+                font_size = 12
+                row_height = 18
+
+            # Find the closest available font size
+            available_sizes = sorted(self.fonts['extra_bold'].keys())
+            closest_size = min(available_sizes, key=lambda x: abs(x - font_size))
+
+            # Draw rank number (always font size 12)
+            self.draw_text_on_surface(rank_text, standing_surface, (10, y + (row_height - 12) // 2), self.BLACK, 'extra_bold', 12, 'left')
+
+            # Draw player name
+            self.draw_text_on_surface(player.user.username, standing_surface, (30, y + (row_height - closest_size) // 2), (0, 255, 0) if player.user.username.startswith("@") else self.BLACK, 'extra_bold', closest_size, 'left')
+
+            # Draw score
+            score_text = self.format_number(self.game_state.referee.get_total_score(player))
+            score_width = self.fonts['extra_bold'][closest_size].size(score_text)[0]
+            self.draw_text_on_surface(score_text, standing_surface, (rect.width - 10 - score_width, y + (row_height - closest_size) // 2), self.WHITE, 'extra_bold', closest_size, 'left')
+
+            y += row_height  # Move to the next row
 
         self.screen.blit(standing_surface, rect)
 
@@ -777,6 +934,8 @@ class InGameUI(UIInterface):
         elif section == "GAME_DATA_LOG_FRAME":
             # This section is just a frame, so we don't need to draw anything inside it
             pass
+        elif section == "NOW_PLAYING_PLAYER_POPUP":
+            self.draw_now_playing_popup(rect)
         else:
             self.draw_default_section(section, rect)
 
@@ -823,7 +982,7 @@ class InGameUI(UIInterface):
                 bust_text = f" Oh Noo! {busted_player.user.username} That's a BUST!"
                 self.draw_text_on_surface(bust_text, self.screen, (self.bust_text_box.left + 10 + prefix_rect.width + 5, self.bust_text_box.top + 10), self.WHITE, 'regular', 28)
                 
-                points_text = f"{lost_points} POINTS LOST!"
+                points_text = f"{self.format_number(lost_points)} POINTS LOST!"
                 self.draw_text_on_surface(points_text, self.screen, (self.bust_text_box.left + 10, self.bust_text_box.top + 60), self.WHITE, 'regular', 20)
                 
                 self.draw_text_on_surface("TURN ENDED", self.screen, (self.bust_text_box.left + 10, self.bust_text_box.top + 90), self.WHITE, 'regular', 24)
@@ -840,8 +999,9 @@ class InGameUI(UIInterface):
 
         scoring_combinations = self.game_state.referee.get_scoring_combinations(self.game_state.dice_values)
         snaptray_rect = self.sections["SNAPTRAY"]
+        y_position = snaptray_rect.bottom - 70  # Position at the bottom
         for i, (combination, points) in enumerate(scoring_combinations):
-            text_box = pygame.Rect(snaptray_rect.left + i*200 + 50, snaptray_rect.top + 50, 180, 60)
+            text_box = pygame.Rect(snaptray_rect.left + i*200 + 50, y_position, 180, 60)
             pygame.draw.rect(self.screen, self.WHITE, text_box)
             pygame.draw.rect(self.screen, self.BLACK, text_box, 2)
             
@@ -850,7 +1010,7 @@ class InGameUI(UIInterface):
                 pygame.draw.rect(self.screen, self.YELLOW, text_box.inflate(-4, -4), 2)
             
             self.draw_text(f"{combination}", text_box, self.BLACK, font_size=20)
-            self.draw_text(f"[ {points} POINTS ]", text_box, self.BLACK, offset_y=30, font_size=20)
+            self.draw_text(f"[ {self.format_number(points)} POINTS ]", text_box, self.BLACK, offset_y=30, font_size=20)
 
     def draw_dicecup(self, rect: pygame.Rect):
         remaining_dice = self.game_state.real_time_counters.rollcupdice_var
@@ -865,6 +1025,8 @@ class InGameUI(UIInterface):
         else:
             bg_color = (255, 0, 0)  # Red
             cup_image_name = "dicecup_red.png"
+
+        print(f"Drawing dicecup: color={bg_color}, image={cup_image_name}")  # Debug print
 
         # Draw background
         pygame.draw.rect(self.screen, bg_color, rect)
@@ -971,40 +1133,38 @@ class InGameUI(UIInterface):
         
         self.draw()
 
+        if self.game_state.current_player.is_bot():
+            self.bot_turn()
+
     def handle_left_click(self, pos: Tuple[int, int]):
-        if self.bank_button.is_clicked(pos):
-            self.game_state.perform_action("BANK")
-        elif self.start_turn_button.is_clicked(pos):
-            self.start_turn()
+        print(f"Clicked position: {pos}")  # Debug print
         
+        for color, button in self.color_buttons.items():
+            if button.is_clicked(pos):
+                print(f"Color button clicked: {color}")  # Debug print
+                self.change_snaptray_color(color)
+                return
+
+        if self.bank_button and self.bank_button.collidepoint(pos):
+            self.game_state.referee.perform_action("BANK")
+        elif self.start_turn_button.is_clicked(pos) and self.game_state.current_game_state in [GameStateEnum.START_TURN, GameStateEnum.NEXTUP_READYUP, GameStateEnum.NEW_STASH]:
+            self.start_turn()
         elif self.bust_button.is_clicked(pos) and self.game_state.current_game_state == GameStateEnum.BUST_TURN_SUMMARY:
-            self.game_state.next_player()
-            self.game_state.referee.set_game_state(GameStateEnum.NEXTUP_READYUP)
-
+            self.game_state.referee.end_turn()
         elif self.banked_turn_summary_button.is_clicked(pos) and self.game_state.current_game_state == GameStateEnum.BANKED_TURN_SUMMARY:
-            self.game_state.next_player()
-            self.game_state.referee.set_game_state(GameStateEnum.NEXTUP_READYUP)
-
+            self.game_state.referee.end_turn()
         elif self.stash_stash.is_clicked(pos):
-            self.game_state.start_new_stash()
-            self.game_state.referee.set_game_state(GameStateEnum.NEW_STASH)
+            self.game_state.referee.perform_action("START_NEW_STASH")
         elif self.stash_plank.is_clicked(pos):
             if self.game_state.selected_dice:
-                self.game_state.stash_dice(self.game_state.selected_dice)
+                self.game_state.referee.perform_action("STASH")
         elif self.scoring_info_button.is_clicked(pos):
             self.show_scoring_info()
-        elif self.dicecup_rect.collidepoint(pos):
-            if self.game_state.current_game_state == GameStateEnum.NEW_STASH:
-                self.roll_dice_new_stash()
-            elif self.game_state.referee.can_roll():
-                self.game_state.roll_dice()
-                self.animate_dice_roll()
+        elif self.dicecup_rect.collidepoint(pos) and self.game_state.referee.can_roll():
+            self.game_state.referee.perform_action("ROLL")
         elif self.game_state.current_player.user.username.startswith("@VIDEO-GAMER"):
-            print(f"Clicked position: {pos}")
-            print(f"Current dice values: {self.game_state.dice_values}")
-            print(f"Stashable dice: {self.game_state.referee.get_stashable_dice(self.game_state.dice_values)}")
             self.handle_dice_or_combination_click(pos)
-                      
+                        
         log_rect = self.sections["GAME_DATA_LOG"]
         if log_rect.collidepoint(pos):
             self.log_dragging = True
@@ -1022,6 +1182,9 @@ class InGameUI(UIInterface):
         pygame.display.flip()
 
     def handle_dice_or_combination_click(self, pos: Tuple[int, int]):
+        if not self.game_state.referee.can_select_dice():
+            return
+
         clicked_dice = self.get_clicked_dice(pos)
         
         if clicked_dice is not None:
@@ -1125,10 +1288,6 @@ class InGameUI(UIInterface):
         print(f"{bot_name} turn started")
         self.game_state.add_log_entry(f"{bot_name} starts their turn", prefix=bot_name)
 
-        self.game_state.turn_started = True
-        self.game_state.turn_banked = False
-        self.game_state.bust_state = False
-
         while not self.game_state.referee.is_turn_over():
             print(f"Current game state: {self.game_state.current_game_state}")
             print(f"Is turn over? {self.game_state.referee.is_turn_over()}")
@@ -1140,23 +1299,33 @@ class InGameUI(UIInterface):
             self.game_state.add_log_entry(f"{bot_name} decides to: {decision}", prefix=bot_name)
             bot_delay()
 
+            if decision == "START_TURN":
+                self.game_state.current_game_state = GameStateEnum.START_TURN
+                self.game_state.turn_started = True
+                continue
+
             if decision == "ROLL":
                 if self.game_state.referee.can_roll():
                     self.display_bot_thinking("Time to roll the dice!")
                     bot_delay()
-                    self.game_state.current_game_state = GameStateEnum.START_TURN  # Ensure correct game state before rolling
                     dice_values = self.game_state.roll_dice()
                     self.game_board.generate_dice_positions(len(dice_values))
                     self.game_board.update_dice_positions([])
                     self.draw()
                     pygame.display.flip()
                     bot_delay()
+                    
+                    if self.game_state.referee.is_bust():
+                        self.display_bot_thinking("Oh no! I rolled a bust!")
+                        bot_delay()
+                        self.game_state.bust()
+                        break
                 else:
                     print(f"{bot_name} can't roll without stashing first")
                     self.game_state.add_log_entry(f"{bot_name} can't roll without stashing first", prefix=bot_name)
-                    self.display_bot_decision("Can't roll without stashing. Ending turn.")
+                    self.display_bot_decision("Can't roll without stashing. Considering other options.")
                     bot_delay()
-                    break
+                    continue
           
             elif decision == "STASH":
                 self.display_bot_thinking("These dice look good. I should stash them.")
@@ -1179,18 +1348,22 @@ class InGameUI(UIInterface):
             elif decision == "BANK":
                 self.display_bot_thinking("I've got a good score. Time to bank!")
                 bot_delay()
-                points = self.game_state.referee.calculate_turn_score()
-                self.game_state.bank_points()
-                self.update_leaderboard()
-                self.game_state.add_log_entry(f"{bot_name} banked {points} points", prefix=bot_name)
-                bot_delay()
-                break
+                if self.game_state.referee.can_bank():
+                    points = self.game_state.referee.calculate_turn_score()
+                    self.game_state.bank_points()
+                    self.update_leaderboard()
+                    self.game_state.add_log_entry(f"{bot_name} banked {points} points", prefix=bot_name)
+                    bot_delay()
+                    break
+                else:
+                    self.game_state.add_log_entry(f"{bot_name} couldn't bank, continuing turn", prefix=bot_name)
+                    continue
             
             elif decision == "START_NEW_STASH":
                 self.display_bot_thinking("My stash is full. Let's start a new one!")
                 bot_delay()
                 self.game_state.start_new_stash()
-                self.game_state.add_log_entry(f"{bot_name} ended their turn", prefix=bot_name)
+                self.game_state.add_log_entry(f"{bot_name} started a new stash", prefix=bot_name)
                 bot_delay()
             
             elif decision == "END_TURN":
@@ -1286,6 +1459,9 @@ class InGameUI(UIInterface):
         
         return " ".join(formatted_words)
     
+    def format_number(self, number):
+        return str(number).replace('0', 'O')
+
     def show_scoring_info(self):
         current_player = self.game_state.current_player
         self.game_state.add_log_entry(f"{current_player.user.username} REQUESTED A REMINDER", prefix="@G-REF.")
@@ -1307,10 +1483,23 @@ class InGameUI(UIInterface):
         
         self.game_state.add_log_entry(scoring_info, prefix="@G-REF.")
 
+    def change_snaptray_color(self, color):
+        print(f"Changing snaptray color to: {color}")  # Debug print
+        self.snaptray_color = color
+        self.snaptray_overlay = self.snaptray_images[color]
+        print(f"Snaptray overlay updated: {self.snaptray_overlay}, size: {self.snaptray_overlay.get_size()}")  # Debug print
+        self.force_redraw()
+
+    def force_redraw(self):
+        print("Forcing redraw")  # Debug print
+        self.draw()
+        pygame.display.flip()
+
 class StashPlank:
-    def __init__(self, rect, font):
+    def __init__(self, rect, fonts, game_state_manager):
         self.rect = rect
-        self.font = font
+        self.fonts = fonts
+        self.game_state_manager = game_state_manager
         self.stash_number = 1
         self.stash_points = 0
         self.selected_dice = []
@@ -1322,6 +1511,10 @@ class StashPlank:
         self.selected_points = 0
         self.total_points = 0
         self.load_images()
+        self.dice_positions = [
+            (10, 60), (80, 60), (150, 60),
+            (220, 60), (290, 60), (360, 60)
+        ]
 
     def load_images(self):
         self.red_plank = pygame.image.load(os.path.join("assets", "stashplank_red.png"))
@@ -1330,76 +1523,77 @@ class StashPlank:
         self.button_bounds = pygame.image.load(os.path.join("assets", "stashplank_button_bounds.png"))
         self.button_hover = pygame.image.load(os.path.join("assets", "stashplank_button_hover.png"))
         self.dice_images = {
-            'red': [pygame.image.load(os.path.join("assets", f"dice_olgreen_{i}_60px.png")) for i in range(1, 7)],
-            'blue': [pygame.image.load(os.path.join("assets", f"dice_blueolgreen_{i}_60px.png")) for i in range(1, 7)]
+            'red': [pygame.image.load(os.path.join("assets", f"dice_olgreen_{i}_70px.png")) for i in range(1, 7)],
+            'blue': [pygame.image.load(os.path.join("assets", f"dice_blueolgreen_{i}_70px.png")) for i in range(1, 7)]
         }
-
-    def update(self, game_state, referee):
-        self.stash_number = int(referee.get_stash_number()[:-2])
-        self.stash_points = game_state.real_time_counters.stash_vscore
-        self.selected_dice = [game_state.dice_values[i] for i in game_state.selected_dice]
-        self.stashed_dice = game_state.current_player.stashed_dice
-        self.is_selection_mode = len(self.selected_dice) > 0
-        self.selected_points = referee.calculate_score(self.selected_dice)
-        self.total_points = self.stash_points + self.selected_points
-        self.is_full_stash = len(self.stashed_dice) + len(self.selected_dice) == 6
-        self.button_enabled = self.is_selection_mode
-        if self.is_selection_mode:
-            self.button_text = f"STASH {self.selected_points} POINTS"
-        else:
-            self.button_text = ""
 
     def draw(self, surface):
         # Draw stashplank_titlebar
-        title_rect = pygame.Rect(self.rect.left, self.rect.top, 440, 20)
+        title_rect = pygame.Rect(self.rect.left, self.rect.top, 440, 40)
         title_color = (0, 187, 0) if self.is_full_stash else (0, 0, 255) if self.is_selection_mode else (255, 0, 0)
         pygame.draw.rect(surface, title_color, title_rect)
-        title_text = f"{self.get_ordinal(self.stash_number)} STASH {self.stash_points} POINTS"
-        self.draw_text(surface, title_text, title_rect, self.font, (255, 255, 255))
+        
+        # Draw stash number text
+        stash_number_text = f"{self.get_ordinal(self.stash_number)} STASH"
+        self.draw_text(surface, stash_number_text.upper(), title_rect.move(10, 5), self.fonts['extra_bold'][24], (0, 255, 0), align='left')
+        
+        # Draw points text
+        points_text = f"{self.game_state_manager.format_number(self.stash_points)} POINTS"
+        text_width = self.fonts['extra_bold'][24].size(stash_number_text.upper())[0]
+        self.draw_text(surface, points_text, title_rect.move(20 + text_width, 5), self.fonts['black'][24], (255, 255, 255), align='left')
 
         # Draw stashplank_plank
         plank_image = self.green_plank if self.is_full_stash else self.blue_plank if self.is_selection_mode else self.red_plank
-        surface.blit(plank_image, (self.rect.left, self.rect.top + 20))
+        surface.blit(plank_image, (self.rect.left, self.rect.top + 40))
 
         # Draw dice
-        dice_positions = [(40, 20), (100, 20), (160, 20), (220, 20), (280, 20), (340, 20)]
-        for i, (x, y) in enumerate(dice_positions):
+        for i, (x, y) in enumerate(self.dice_positions):
             if i < len(self.stashed_dice):
                 die_value = self.stashed_dice[i]
-                surface.blit(self.dice_images['red'][die_value - 1], (self.rect.left + x, self.rect.top + y + 20))
+                surface.blit(self.dice_images['red'][die_value - 1], (self.rect.left + x, self.rect.top + y))
             elif i - len(self.stashed_dice) < len(self.selected_dice):
                 die_value = self.selected_dice[i - len(self.stashed_dice)]
-                surface.blit(self.dice_images['blue'][die_value - 1], (self.rect.left + x, self.rect.top + y + 20))
+                surface.blit(self.dice_images['blue'][die_value - 1], (self.rect.left + x, self.rect.top + y))
 
         # Draw stashplank_infobar
-        info_rect = pygame.Rect(self.rect.left, self.rect.top + 120, 440, 100)
-        info_color = (0, 187, 0) if self.is_full_stash else (0, 0, 255) if self.is_selection_mode else (255, 0, 0)
+        info_rect = pygame.Rect(self.rect.left, self.rect.top + 150, 440, 80)
+        info_color = (0, 0, 255) if self.is_selection_mode else (255, 0, 0)
         pygame.draw.rect(surface, info_color, info_rect)
         if self.is_selection_mode:
-            info_text = [
-                f"ADDS {self.selected_points} POINTS TO GET {self.total_points} POINTS",
-                f"IN {self.get_ordinal(self.stash_number)} STASH",
-                "UNLOCKS OPTION: ROLL REMAINING DICE"
-            ]
-            for i, text in enumerate(info_text):
-                self.draw_text(surface, text, info_rect.move(10, i * 25), self.font, (255, 255, 255), align='left')
+            stashing_text = f"STASHING ADDS "
+            points_text = f"{self.game_state_manager.format_number(self.selected_points)} POINTS"
+            self.draw_text(surface, stashing_text, info_rect.move(10, 10), self.fonts['extra_bold'][24], (0, 255, 0), align='left')
+            self.draw_text(surface, points_text, info_rect.move(10 + self.fonts['extra_bold'][24].size(stashing_text)[0], 10), self.fonts['extra_bold'][24], (255, 255, 255), align='left')
+            
+            unlocks_text = "UNLOCKS "
+            roll_again_text = "ROLL AGAIN "
+            option_text = "OPTION"
+            x_pos = 10
+            y_pos = 45
+            self.draw_text(surface, unlocks_text, info_rect.move(x_pos, y_pos), self.fonts['extra_bold'][24], (0, 255, 0), align='left')
+            x_pos += self.fonts['extra_bold'][24].size(unlocks_text)[0]
+            self.draw_text(surface, roll_again_text, info_rect.move(x_pos, y_pos), self.fonts['black'][24], (255, 255, 255), align='left')
+            x_pos += self.fonts['black'][24].size(roll_again_text)[0]
+            self.draw_text(surface, option_text, info_rect.move(x_pos, y_pos), self.fonts['extra_bold'][24], (0, 255, 0), align='left')
 
-        # Draw stashplank_actionbar
-        action_rect = pygame.Rect(self.rect.left, self.rect.top + 220, 440, 20)
-        action_color = (0, 187, 0) if self.is_full_stash else (0, 0, 170) if self.is_selection_mode else (255, 0, 0)
-        pygame.draw.rect(surface, action_color, action_rect)
-        if self.button_enabled:
-            self.draw_text(surface, self.button_text, action_rect, self.font, (255, 255, 255))
+        # Draw green CLICK rectangle
+        if self.is_selection_mode:
+            click_rect = pygame.Rect(self.rect.right, self.rect.top + 40, 20, 110)
+            pygame.draw.rect(surface, (0, 187, 0), click_rect)  # #00BB00
+            click_text = self.fonts['black'][20].render("CLICK", True, (255, 255, 255))
+            rotated_text = pygame.transform.rotate(click_text, 90)
+            text_rect = rotated_text.get_rect(center=click_rect.center)
+            surface.blit(rotated_text, text_rect)
 
         # Draw button hover effect if needed
         if self.is_selection_mode:
             mouse_pos = pygame.mouse.get_pos()
             if self.rect.collidepoint(mouse_pos):
-                relative_pos = (mouse_pos[0] - self.rect.left, mouse_pos[1] - self.rect.top - 20)
+                relative_pos = (mouse_pos[0] - self.rect.left, mouse_pos[1] - self.rect.top - 40)
                 if 0 <= relative_pos[0] < self.button_bounds.get_width() and 0 <= relative_pos[1] < self.button_bounds.get_height():
                     mask = pygame.mask.from_surface(self.button_bounds)
                     if mask.get_at(relative_pos):
-                        surface.blit(self.button_hover, (self.rect.left, self.rect.top + 20))
+                        surface.blit(self.button_hover, (self.rect.left, self.rect.top + 40))
 
     def draw_text(self, surface, text, rect, font, color, align='center'):
         text_surface = font.render(text, True, color)
@@ -1419,10 +1613,25 @@ class StashPlank:
             suffix = {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th')
         return f"{n}{suffix}"
 
+    def update(self, game_state, referee):
+        self.stash_number = int(referee.get_stash_number()[:-2])
+        self.stash_points = game_state.real_time_counters.stash_vscore
+        self.selected_dice = [game_state.dice_values[i] for i in game_state.selected_dice]
+        self.stashed_dice = game_state.current_player.stashed_dice
+        self.is_selection_mode = len(self.selected_dice) > 0
+        self.selected_points = referee.calculate_score(self.selected_dice)
+        self.total_points = self.stash_points + self.selected_points
+        self.is_full_stash = len(self.stashed_dice) + len(self.selected_dice) == 6
+        self.button_enabled = self.is_selection_mode
+        if self.is_selection_mode:
+            self.button_text = f"STASH {self.selected_points} POINTS"
+        else:
+            self.button_text = ""
+
     def is_clicked(self, pos):
         if not self.is_selection_mode:
             return False
-        relative_pos = (pos[0] - self.rect.left, pos[1] - self.rect.top - 20)
+        relative_pos = (pos[0] - self.rect.left, pos[1] - self.rect.top - 40)
         if 0 <= relative_pos[0] < self.button_bounds.get_width() and 0 <= relative_pos[1] < self.button_bounds.get_height():
             mask = pygame.mask.from_surface(self.button_bounds)
             return mask.get_at(relative_pos)
@@ -1432,9 +1641,10 @@ class StashPlank:
         self.button_text = text
 
 class StashStash:
-    def __init__(self, rect, font):
+    def __init__(self, rect, font, game_state_manager):
         self.rect = rect
         self.font = font
+        self.game_state_manager = game_state_manager
         self.stash_stash_points = 0
         self.full_stashes_moved = 0
         self.total_banked_stashes = 0
@@ -1461,7 +1671,7 @@ class StashStash:
         title_rect = pygame.Rect(self.rect.left, self.rect.top, 440, 20)
         title_color = (0, 187, 0) if self.is_full_stash else (204, 0, 0)
         pygame.draw.rect(surface, title_color, title_rect)
-        title_text = f"STASHSTASH {self.stash_stash_points} POINTS"
+        title_text = f"STASHSTASH {self.game_state_manager.format_number(self.stash_stash_points)} POINTS"
         self.draw_text(surface, title_text, title_rect, self.font, (255, 255, 255))
 
         # Draw stashstash_infobar
@@ -1470,13 +1680,13 @@ class StashStash:
         pygame.draw.rect(surface, info_color, info_rect)
         if self.is_full_stash:
             info_text = [
-                f"MOVE {self.stash_stash_points} POINTS TO STASHSTASH",
+                f"MOVE {self.game_state_manager.format_number(self.stash_stash_points)} POINTS TO STASHSTASH",
                 "GET A NEW EMPTY STASH"
             ]
         else:
             info_text = [
-                f"HOLDING {self.full_stashes_moved} STASHES",
-                f"TOTAL BANKED STASHES {self.total_banked_stashes}"
+                f"HOLDING {self.game_state_manager.format_number(self.full_stashes_moved)} STASHES",
+                f"TOTAL BANKED STASHES {self.game_state_manager.format_number(self.total_banked_stashes)}"
             ]
         for i, text in enumerate(info_text):
             self.draw_text(surface, text, info_rect.move(10, i * 25), self.font, (255, 255, 255), align='left')

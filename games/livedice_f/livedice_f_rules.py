@@ -18,9 +18,10 @@ class GameStateEnum(Enum):
     NEW_STASH = auto()
     ROLLRESULT_POSITIVE_STASHOPTIONS_NOSTASH = auto()
     ROLLRESULT_POSITIVE_STASHOPTIONS_HAVESTASHED_CURRENTROLL = auto()
+    END_GAME_SUMMARY = auto()
 
 class LiveDiceFRules:
-    TARGET_SCORE = 4000
+    TARGET_SCORE = 4000  # This will be displayed as 4OOO in the UI
     MAX_DICE = 6
 
     @staticmethod
@@ -149,16 +150,20 @@ class LiveDiceFRules:
             return f"{stash_level}th"
 
     @staticmethod
+    def can_roll_again(has_stashed_this_turn: bool) -> bool:
+        return has_stashed_this_turn
+
+    @staticmethod
     def is_bust(dice_values: List[int]) -> bool:
         return len(LiveDiceFRules.get_stashable_dice(dice_values)) == 0
 
     @staticmethod
-    def can_stash(selected_dice: List[int]) -> bool:
-        return len(selected_dice) > 0
+    def can_bank(has_stashed_this_turn: bool, virtual_score: int) -> bool:
+        return has_stashed_this_turn and virtual_score > 0
 
     @staticmethod
-    def can_bank(turn_started: bool, virtual_score: int) -> bool:
-        return turn_started and virtual_score > 0
+    def can_stash(selected_dice: List[int]) -> bool:
+        return len(selected_dice) > 0
 
     @staticmethod
     def is_full_stash(stashed_dice: List[int]) -> bool:

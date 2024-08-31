@@ -7,11 +7,10 @@ class DiceRenderer:
         self.dice_surfaces = self.load_dice_surfaces()
         self.dice_size = {
             'snaptray': 120,
-            'stash': 60,
+            'stash': 70,
             'log': 28
         }
         self.log_font = pygame.font.Font(os.path.join("assets", "open-sauce-two", "OpenSauceTwo-Regular.ttf"), 24)
-
 
     def load_dice_surfaces(self):
         dice_surfaces = {
@@ -22,8 +21,8 @@ class DiceRenderer:
         for i in range(1, 7):
             dice_surfaces['snaptray'][f'white_{i}'] = pygame.image.load(f"assets/dice_{i}_120px.png")
             dice_surfaces['snaptray'][f'green_{i}'] = pygame.image.load(f"assets/dice_olgreen_{i}_120px.png")
-            dice_surfaces['stash'][f'white_{i}'] = pygame.image.load(f"assets/dice_{i}_60px.png")
-            dice_surfaces['stash'][f'green_{i}'] = pygame.image.load(f"assets/dice_olgreen_{i}_60px.png")
+            dice_surfaces['stash'][f'white_{i}'] = pygame.image.load(f"assets/dice_{i}_70px.png")
+            dice_surfaces['stash'][f'green_{i}'] = pygame.image.load(f"assets/dice_olgreen_{i}_70px.png")
             dice_surfaces['log'][f'white_{i}'] = pygame.image.load(f"assets/dice_{i}_28px.png")
             dice_surfaces['log'][f'green_{i}'] = pygame.image.load(f"assets/dice_olgreen_{i}_28px.png")
         

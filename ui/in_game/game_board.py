@@ -1,3 +1,4 @@
+import os
 import pygame
 import math
 import random
@@ -22,6 +23,11 @@ class GameBoard:
         self.animation_time = 0
         self.max_animation_time = 1.0
         self.dice_stop_times = []
+
+        # Load the snaptray overlay image
+        self.snaptray_overlay = pygame.image.load(os.path.join("assets", "snaptray_lineart_red.png"))
+        self.snaptray_overlay = pygame.transform.scale(self.snaptray_overlay, (rect.width, rect.height))
+
 
     def setup_hexagon(self):
         center = (self.rect.centerx, self.rect.centery)
@@ -98,7 +104,12 @@ class GameBoard:
     def draw(self) -> None:
         center = (self.rect.centerx, self.rect.centery)
         size = min(self.rect.width, self.rect.height) * 0.45
-        self.draw_hexagon((204, 0, 0), center, size)  # #CC0000 red
+        
+        # Draw the hexagon
+        self.draw_hexagon((204, 0, 0), center, size)  #CC0000 red
+        
+        # Draw the snaptray overlay
+        self.screen.blit(self.snaptray_overlay, self.rect.topleft)
 
     def update(self, dt):
         if self.animation_time < self.max_animation_time:

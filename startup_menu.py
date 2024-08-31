@@ -9,25 +9,27 @@ class StartupMenu:
         self.human_players = 1
         self.ai_players = 1
         self.max_players = 4
+        self.RED = (255, 0, 0)  # Define red color
 
     def draw(self):
-        self.screen.fill((255, 255, 255))
+        self.screen.fill(self.RED)  # Fill the screen with red
         
-        title = self.font.render("•LIVEDICE [ F ]", True, (0, 0, 0))
+        title = self.font.render("•LIVEDICE [ F ]", True, (255, 255, 255))  # White text
         self.screen.blit(title, (self.screen.get_width() // 2 - title.get_width() // 2, 50))
 
-        human_text = self.font.render(f"Human Players: {self.human_players}", True, (0, 0, 0))
+        human_text = self.font.render(f"Human Players: {self.human_players}", True, (255, 255, 255))  # White text
         self.screen.blit(human_text, (100, 150))
 
-        ai_text = self.font.render(f"AI Players: {self.ai_players}", True, (0, 0, 0))
+        ai_text = self.font.render(f"AI Players: {self.ai_players}", True, (255, 255, 255))  # White text
         self.screen.blit(ai_text, (100, 200))
 
-        start_text = self.font.render("Start Game", True, (0, 0, 0))
+        start_text = self.font.render("Start Game", True, (0, 0, 0))  # Black text
         start_rect = start_text.get_rect(center=(self.screen.get_width() // 2, 300))
-        pygame.draw.rect(self.screen, (200, 200, 200), start_rect)
+        pygame.draw.rect(self.screen, (255, 255, 255), start_rect)  # White button
         self.screen.blit(start_text, start_rect)
 
         pygame.display.flip()
+
 
     def handle_event(self, event):
         if event.type == pygame.MOUSEBUTTONDOWN:

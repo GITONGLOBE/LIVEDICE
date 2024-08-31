@@ -10,9 +10,9 @@ class Player:
         self.user = user
         self.player_number = player_number
         self.game_state_manager = game_state_manager
-        self.turn_scores = {}  # Dictionary to store turn scores
+        self.turn_scores = {}
         self.stashed_dice = []
-        self.stashed_dice_scores = []  # List to store scores of each stash
+        self.stashed_dice_scores = []
         self.stashed_dice_this_roll = False
         self.stash_stash = 0
         self.full_stashes_moved = 0
@@ -23,11 +23,6 @@ class Player:
         self.is_active = False
         self.banked_full_stashes = 0
         self.full_stashes_moved_this_turn = 0
-        self.total_full_stashes_banked = 0
-
-        self.bust_state = False
-        self.busted_player = None
-        self.busted_lost_score = 0
 
     def record_turn(self, turn_number: int, banked_score: int, rolls: int, full_stashes_moved: int):
         self.turn_scores[turn_number] = {
@@ -37,7 +32,8 @@ class Player:
         }
         self.turn_count += 1
         self.banked_full_stashes += full_stashes_moved
-        self.full_stashes_moved_this_turn = 0  # Reset for the next turn
+        self.full_stashes_moved_this_turn = 0
+        self.game_state_manager.add_log_entry(f"{self.user.username} recorded turn {self.game_state_manager.format_number(turn_number)}: Score: {self.game_state_manager.format_number(banked_score)}, Rolls: {self.game_state_manager.format_number(rolls)}, Stashes: {self.game_state_manager.format_number(full_stashes_moved)}")
 
     def get_total_banked_full_stashes(self) -> int:
         return self.banked_full_stashes
@@ -48,31 +44,19 @@ class Player:
     def get_total_score(self) -> int:
         return sum(turn["SCORE"] for turn in self.turn_scores.values())
 
+    def get_stash_score(self) -> int:
+        return sum(self.stashed_dice_scores)
+
     def add_to_stash(self, dice, score):
         self.stashed_dice.extend(dice)
         self.stashed_dice_scores.append(score)
         self.stashes_this_turn += 1
-
-    def get_full_stashes_moved(self, turn_number: int) -> int:
-        return self.turn_scores.get(turn_number, {}).get("STASHES", 0)
 
     def get_turn_score(self, turn_number: int):
         return self.turn_scores.get(turn_number, {"SCORE": 0, "ROLLS": 0, "STASHES": 0})
 
     def is_bot(self) -> bool:
         return self.user.username.startswith("@GO-BOT")
-
-    def get_stash_score(self):
-        return sum(self.stashed_dice_scores)
-
-    def get_game_scorerecord(self):
-        return self.score
-
-    def get_game_rolls(self):
-        return sum(turn["ROLLS"] for turn in self.turn_scores.values())
-
-    def get_game_stashes(self):
-        return sum(turn["STASHES"] for turn in self.turn_scores.values())
 
     def reset_turn(self):
         self.stashed_dice = []
@@ -83,6 +67,7 @@ class Player:
         self.stash_level = 1
         self.roll_count = 0
         self.full_stashes_moved_this_turn = 0
+        self.stashed_dice_this_roll = False
         
 class GameStateManager:
     def __init__(self, ui, human_players, ai_players):
@@ -204,7 +189,7 @@ class GameStateManager:
         total_score = self.referee.calculate_turn_score()
         stash_stash_points, full_stashes_moved = self.referee.get_stash_stash_info()
         self.current_player.record_turn(self.current_turn_number, total_score, self.current_player.roll_count, self.current_player.full_stashes_moved_this_turn)
-        self.add_log_entry(f"{self.current_player.user.username} BANKED {total_score} POINTS (Stash Stash: {stash_stash_points}, Full stashes: {self.current_player.full_stashes_moved_this_turn})")
+        self.add_log_entry(f"{self.current_player.user.username} BANKED {self.format_number(total_score)} POINTS (Stash Stash: {self.format_number(stash_stash_points)}, Full stashes: {self.format_number(self.current_player.full_stashes_moved_this_turn)})")
         self.turn_banked = True
         self.referee.set_game_state(GameStateEnum.BANKED_TURN_SUMMARY)
         self.real_time_counters.update_counters(self)
@@ -215,7 +200,7 @@ class GameStateManager:
         self.busted_player = self.current_player
         self.busted_lost_score = self.referee.calculate_turn_score()
         self.current_player.record_turn(self.current_turn_number, 0, self.current_player.roll_count, 0)
-        self.add_log_entry(f"{self.current_player.user.username} busted and lost {self.busted_lost_score} points")
+        self.add_log_entry(f"{self.current_player.user.username} busted and lost {self.format_number(self.busted_lost_score)} points")
         self.referee.set_game_state(GameStateEnum.BUST_TURN_SUMMARY)
         self.reset_full_stashes_moved()  # Add this line
         self.real_time_counters.update_counters(self)
@@ -361,9 +346,6 @@ class GameStateManager:
     def get_game_turns(self):
         return max(player.turn_count for player in self.players) if self.players else 0
 
-    def calculate_table_score(self) -> int:
-        return self.referee.calculate_score(self.dice_values)
-
     def format_dice_for_snaptray(self, dice_values):
         formatted_dice = []
         for i, value in enumerate(dice_values):
@@ -411,6 +393,17 @@ class GameStateManager:
             prefix = "@G-REF."
         
         formatted_entry = entry.upper()
+        
+        # Replace all numbers in the entry
+        words = formatted_entry.split()
+        formatted_words = []
+        for word in words:
+            if word.isdigit():
+                formatted_words.append(self.format_number(word))
+            else:
+                formatted_words.append(word)
+        formatted_entry = ' '.join(formatted_words)
+        
         lines = formatted_entry.split('\n')
         
         for i, line in enumerate(lines):
@@ -438,8 +431,11 @@ class GameStateManager:
 
     def format_dice(self, dice_values):
         stashable_dice = self.referee.get_stashable_dice(dice_values)
-        return ' '.join([f'<dice>{"green" if i in stashable_dice else "white"}_{v}</dice>' for i, v in enumerate(dice_values)])
-    
+        return ' '.join([f'<dice>{"green" if i in stashable_dice else "white"}_{self.format_number(v)}</dice>' for i, v in enumerate(dice_values)])
+
+    def format_number(self, number):
+        return str(number).replace('0', 'O')
+        
     def handle_error(self, error_message: str):
         print(f"Error: {error_message}")
         self.add_log_entry(f"ERROR: {error_message}")
@@ -475,7 +471,7 @@ class GameStateManager:
 
     def update_game_state(self):
         if self.is_game_over():
-            self.referee.set_game_state(GameStateEnum.GAME_OVER)
+            self.referee.set_game_state(GameStateEnum.END_GAME_SUMMARY)
         elif self.bust_state:
             self.referee.set_game_state(GameStateEnum.BUST_TURN_SUMMARY)
         elif self.turn_banked:
@@ -493,6 +489,9 @@ class GameStateManager:
             self.referee.set_game_state(GameStateEnum.STASHCHOICE_STASHED_PARTIAL)
 
         self.real_time_counters.update_counters(self)
+
+    def calculate_turn_score(self) -> int:
+        return self.referee.calculate_turn_score()
 
     def is_game_over(self) -> bool:
         return self.referee.is_game_over()
