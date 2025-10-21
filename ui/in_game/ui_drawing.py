@@ -9,6 +9,7 @@ import sys
 import os
 import time
 from typing import List, Tuple, Optional
+from ui.in_game.ui_helpers import UIHelpers
 from games.livedice_f.livedice_f_rules import GameStateEnum
 
 
@@ -65,7 +66,7 @@ class UIDrawing:
         
         # Draw right panel sections (FIXED: use self.draw_* not self.ui.draw_*)
         self.draw_dicecup()
-        pygame.draw.rect(self.ui.screen, self.ui.DARK_BLUE, self.ui.sections["GAME_DATA_LOG_FRAME"])
+        
         self.draw_scrollable_log(self.ui.sections["GAME_DATA_LOG"])
         
         # Draw game content
@@ -73,21 +74,7 @@ class UIDrawing:
         self.ui.game_board.draw()
         self.draw_dice()
 
-        if self.ui.bot_thinking_message:
-            self.draw_bot_message(self.ui.bot_thinking_message, (0, 0, 255))
-            self.ui.bot_thinking_message = ""
-        if self.ui.bot_decision_message:
-            self.draw_bot_message(self.ui.bot_decision_message, (255, 0, 0))
-            self.ui.bot_decision_message = ""
-
-        # Draw gameloop text
-        gameloop_text = f"CURRENT GAMELOOP: {self.ui.game_state.current_game_state.name}"
-        gameloop_font = self.ui.fonts['regular'][24]
-        gameloop_surface = gameloop_font.render(gameloop_text, True, (255, 0, 0))
-        gameloop_rect = gameloop_surface.get_rect(center=(self.ui.WINDOW_WIDTH // 2, 20))
-        self.ui.screen.blit(gameloop_surface, gameloop_rect)
-        
-        # Draw popups (overlay on top of everything)
+        # NEW: Draw bot chat bubbles instead of old text messages
         if self.should_draw_popup("READY_UP_POPUP"):
             self.draw_ready_up_popup()
         elif self.should_draw_popup("TURN_BUST_POPUP"):
@@ -98,6 +85,9 @@ class UIDrawing:
             self.draw_end_game_summary()
 
         self.ui.scoring_info_button.draw(self.ui.screen)
+        
+        # Draw X button (overlay on top right corner)
+        self.draw_x_button()
 
         # Draw color change buttons
         for button in self.ui.color_buttons.values():
@@ -146,16 +136,18 @@ class UIDrawing:
         x = rect.x + 10
         y = rect.y + 45
         
-        # Bullet point and text - WHITE TEXT
-        self.draw_text_with_font("•", x, y, self.ui.WHITE, self.ui.fonts['black'][20])
-        x += self.ui.fonts['black'][20].size("• ")[0]
+        # Bullet point and text - BULLET AND DICE IN RED #FF0000
+        # FIXED: Bullet in red and same font as LIVE
+        self.draw_text_with_font("•", x, y + 2, (255, 0, 0), self.ui.font_textbox_black)
+        x += self.ui.font_textbox_black.size("• ")[0]
         
         text = "LIVE"
         self.draw_text_with_font(text, x, y + 2, self.ui.WHITE, self.ui.font_textbox_black)
         x += self.ui.font_textbox_black.size(text)[0]
         
+        # FIXED: DICE in red #FF0000
         text = "DICE"
-        self.draw_text_with_font(text, x, y + 2, self.ui.WHITE, self.ui.font_textbox_semibold)
+        self.draw_text_with_font(text, x, y + 2, (255, 0, 0), self.ui.font_textbox_semibold)
         x += self.ui.font_textbox_semibold.size(text)[0]
         
         text = " [ "
@@ -169,40 +161,43 @@ class UIDrawing:
         text = " ]"
         self.draw_text_with_font(text, x, y + 2, self.ui.WHITE, self.ui.font_textbox_semibold)
         
-        # Next lines - WHITE TEXT
+        # Next lines - DYNAMIC GAME SETTINGS (WHITE TEXT)
         y += 25
         x = rect.x + 10
         
-        text = "CORE"
+        # Show current ruleset
+        ruleset_text = self.ui.game_state.ruleset
+        text = ruleset_text
         self.draw_text_with_font(text, x, y, self.ui.WHITE, self.ui.font_textbox_black)
         x += self.ui.font_textbox_black.size(text)[0]
         
-        text = "GAME"
+        text = " RULES"
         self.draw_text_with_font(text, x, y, self.ui.WHITE, self.ui.font_textbox_semibold)
         
         y += 20
         x = rect.x + 10
         
-        text = "6"
+        # Show endgoal
+        text = "ENDGOAL "
         self.draw_text_with_font(text, x, y, self.ui.WHITE, self.ui.font_textbox_semibold)
         x += self.ui.font_textbox_semibold.size(text)[0]
         
-        text = "DICE"
+        endgoal_text = self.ui.format_number(str(self.ui.game_state.endgoal))
+        text = endgoal_text
         self.draw_text_with_font(text, x, y, self.ui.WHITE, self.ui.font_textbox_black)
         
         y += 20
         x = rect.x + 10
         
-        text = "FIRST "
-        self.draw_text_with_font(text, x, y, self.ui.WHITE, self.ui.font_textbox_semibold)
-        x += self.ui.font_textbox_semibold.size(text)[0]
-        
-        text = "TO "
-        self.draw_text_with_font(text, x, y, self.ui.WHITE, self.ui.font_textbox_semibold)
-        x += self.ui.font_textbox_semibold.size(text)[0]
-        
-        text = self.ui.format_number("4000")
+        # Show bot difficulty
+        bot_diff_text = self.ui.game_state.bot_difficulty
+        text = bot_diff_text
         self.draw_text_with_font(text, x, y, self.ui.WHITE, self.ui.font_textbox_black)
+        x += self.ui.font_textbox_black.size(text)[0]
+        
+        text = " BOTS"
+        self.draw_text_with_font(text, x, y, self.ui.WHITE, self.ui.font_textbox_semibold)
+
 
     def draw_leaderboard_standing(self):
         """Draw LEADERBOARD_STANDING section (top 8 player rankings)"""
@@ -312,7 +307,7 @@ class UIDrawing:
         
         # rt_stats_base (8 rows, alternating colors)
         rows = [
-            ("TURN\nNUMBER", str(self.ui.game_state.current_turn_number), self.ui.DARK_GREEN),
+            ("TURN\nNUMBER", str(self.ui.game_state.current_player.turn_count + 1), self.ui.DARK_GREEN),
             ("ROLLS\nROLLED", str(self.ui.game_state.current_player.roll_count), self.ui.MEDIUM_GREEN),
             ("STASH\nNUMBER", self.ui.game_state.referee.get_stash_number(), self.ui.DARK_GREEN),
             ("MOVED TO\nSTASHSTASH", str(self.ui.game_state.current_player.full_stashes_moved_this_turn), self.ui.MEDIUM_GREEN),
@@ -414,7 +409,7 @@ class UIDrawing:
         
         # Draw actual turn data on top of backgrounds
         y = base_row_y + 5
-        for turn_num in range(1, min(self.ui.game_state.current_turn_number + 1, 14)):  # Max 13 turns displayed
+        for turn_num in range(1, min(current_player.turn_count + 1, 14)):  # FIXED: Use player's turn_count  # Max 13 turns displayed
             turn_data = current_player.get_turn_score(turn_num)
             
             # TURN number (cyan text)
@@ -1073,7 +1068,7 @@ class UIDrawing:
             dice_image = pygame.image.load(os.path.join("assets", f"dicecup_{remaining_dice}.png"))
 
         self.ui.screen.blit(cup_image, (rect.left, rect.top))
-        self.ui.screen.blit(dice_image, (rect.left + 270, rect.top))
+        self.ui.screen.blit(dice_image, (rect.left + 170, rect.top))  # FIXED: Moved 100px left
 
         self.ui.dicecup_rect.topleft = (rect.left, rect.top)
 
@@ -1128,7 +1123,7 @@ class UIDrawing:
             stashable_dice = self.ui.game_state.referee.get_stashable_dice(self.ui.game_state.dice_values)
             formatted_dice = [f"{'green' if i in stashable_dice else 'white'}_{value}" for i, value in enumerate(self.ui.game_state.dice_values)]
             # Get hovered dice but don't pass to renderer to avoid green outline effect
-            hovered_dice, hovered_combination = self.get_hovered_combination(pygame.mouse.get_pos())
+            hovered_dice, hovered_combination = UIHelpers.get_hovered_combination(pygame.mouse.get_pos(), self.ui.dice_rects, self.ui.game_state.dice_values)
             
             if len(self.ui.game_board.dice_positions) != len(self.ui.game_state.dice_values):
                 self.ui.game_board.generate_dice_positions(len(self.ui.game_state.dice_values))
@@ -1143,28 +1138,6 @@ class UIDrawing:
             )
         else:
             self.ui.dice_rects = []
-
-    def get_hovered_combination(self, mouse_pos):
-        """Get which dice are currently being hovered over"""
-        hovered_dice = []
-        hovered_combination = []
-
-        if self.ui.dice_rects and self.ui.game_state.dice_values:
-            for i, dice_rect in enumerate(self.ui.dice_rects):
-                if dice_rect.collidepoint(mouse_pos):
-                    if i < len(self.ui.game_state.dice_values):
-                        dice_value = self.ui.game_state.dice_values[i]
-                        collection = [idx for idx, v in enumerate(self.ui.game_state.dice_values) if v == dice_value]
-                        if len(collection) >= 3:
-                            hovered_dice = collection[:3]
-                        elif len(collection) == 2 and dice_value == 6:
-                            hovered_dice = collection
-                        else:
-                            hovered_dice = [i]
-                        hovered_combination = hovered_dice
-                    break
-
-        return hovered_dice, hovered_combination
 
 
     def draw_ready_up_popup(self):
@@ -1337,8 +1310,144 @@ class UIDrawing:
         button_text_width = self.ui.font_textbar_black.size(button_text)[0]
         self.draw_text_with_font(button_text, button_rect.centerx - button_text_width // 2, button_rect.centery - 8, text_color, self.ui.font_textbar_black)
 
+    def draw_x_button(self):
+        """Draw X button in upper right corner (40x40px) to return to menu"""
+        # X button position: top right corner
+        x_button_rect = pygame.Rect(1880, 0, 40, 40)
+        self.x_button_rect = x_button_rect  # Store for click detection
+        
+        # Get mouse position for hover effect
+        mouse_pos = pygame.mouse.get_pos()
+        is_hovering = x_button_rect.collidepoint(mouse_pos)
+        
+        # Draw button background
+        bg_color = self.ui.RED if is_hovering else self.ui.DARK_RED
+        pygame.draw.rect(self.ui.screen, bg_color, x_button_rect)
+        
+        # Draw X in the middle
+        text_color = self.ui.WHITE
+        x_text = self.ui.fonts['regular'][36].render("X", True, text_color)
+        x_text_rect = x_text.get_rect(center=x_button_rect.center)
+        self.ui.screen.blit(x_text, x_text_rect)
+    
+    def draw_bot_chat_bubble(self, bot_name, message):
+        """
+        Draw bot message in a chat bubble based on bot position.
+        
+        Args:
+            bot_name: Name of bot (e.g., "EASY-GO-BOT-1")
+            message: Message to display
+        """
+        # Determine bot number from name
+        bot_number = self._get_bot_number(bot_name)
+        if bot_number is None:
+            return
+        
+        # Get bubble position and configuration based on bot number
+        bubble_config = self._get_bubble_config(bot_number)
+        
+        # Draw the chat bubble
+        self._draw_chat_bubble(bubble_config, bot_name, message)
+    
+    def _get_bot_number(self, bot_name):
+        """Extract bot number from bot name"""
+        # Bot names are like "EASY-GO-BOT-1", "NORMAL-GO-BOT-2", etc.
+        if "BOT-1" in bot_name:
+            return 1
+        elif "BOT-2" in bot_name:
+            return 2
+        elif "BOT-3" in bot_name:
+            return 3
+        elif "BOT-4" in bot_name:
+            return 4
+        return None
+    
+    def _get_bubble_config(self, bot_number):
+        """
+        Get chat bubble configuration for each bot position.
+        Based on BOT-CHATBUBBLES-LAYOUTDESIGN.png:
+        - BOT-1: Top-left (label top, bubble below)
+        - BOT-2: Top-right (label top, bubble below)
+        - BOT-3: Bottom-left (label bottom, bubble above)
+        - BOT-4: Bottom-right (label bottom, bubble above)
+        """
+        configs = {
+            1: {  # Top-left
+                "label_pos": (550, 20),
+                "bubble_rect": pygame.Rect(380, 30, 230, 70),
+                "label_above": True
+            },
+            2: {  # Top-right
+                "label_pos": (1090, 20),
+                "bubble_rect": pygame.Rect(850, 30, 230, 70),
+                "label_above": True
+            },
+            3: {  # Bottom-left
+                "label_pos": (550, 795),
+                "bubble_rect": pygame.Rect(380, 720, 230, 70),
+                "label_above": False
+            },
+            4: {  # Bottom-right
+                "label_pos": (1090, 795),
+                "bubble_rect": pygame.Rect(850, 720, 230, 70),
+                "label_above": False
+            }
+        }
+        return configs.get(bot_number, configs[1])
+    
+    def _draw_chat_bubble(self, config, bot_name, message):
+        """Draw the actual chat bubble with text"""
+        # Draw yellow label above or below bubble
+        label_color = self.ui.YELLOW
+        label_text = bot_name
+        label_surface = self.ui.fonts['regular'][16].render(label_text, True, label_color)
+        label_rect = label_surface.get_rect(center=config["label_pos"])
+        self.ui.screen.blit(label_surface, label_rect)
+        
+        # Draw blue bubble background
+        bubble_rect = config["bubble_rect"]
+        pygame.draw.rect(self.ui.screen, self.ui.BLUE, bubble_rect)
+        
+        # Draw bubble border
+        pygame.draw.rect(self.ui.screen, self.ui.WHITE, bubble_rect, 2)
+        
+        # Split message into lines (max 2 lines)
+        words = message.split()
+        lines = self._split_message_into_lines(words, bubble_rect.width - 20)
+        
+        # Draw text inside bubble (centered, white text)
+        y_offset = bubble_rect.y + 15
+        for line in lines[:2]:  # Max 2 lines
+            line_surface = self.ui.fonts['regular'][16].render(line, True, self.ui.WHITE)
+            line_rect = line_surface.get_rect(centerx=bubble_rect.centerx, y=y_offset)
+            self.ui.screen.blit(line_surface, line_rect)
+            y_offset += 20
+    
+    def _split_message_into_lines(self, words, max_width):
+        """Split message into lines that fit within max_width"""
+        lines = []
+        current_line = []
+        font = self.ui.fonts['regular'][16]
+        
+        for word in words:
+            test_line = ' '.join(current_line + [word])
+            test_width = font.size(test_line)[0]
+            
+            if test_width <= max_width:
+                current_line.append(word)
+            else:
+                if current_line:
+                    lines.append(' '.join(current_line))
+                current_line = [word]
+        
+        if current_line:
+            lines.append(' '.join(current_line))
+        
+        return lines
+    
     def draw_bot_message(self, message, color):
-        """Draw bot thinking/decision message"""
-        text_surface = self.ui.fonts['regular'][36].render(message, True, color)
-        text_rect = text_surface.get_rect(center=(self.ui.WINDOW_WIDTH // 2, self.ui.WINDOW_HEIGHT - 50))
-        self.ui.screen.blit(text_surface, text_rect)
+        """DEPRECATED - Old method replaced by draw_bot_chat_bubble"""
+        # This method is deprecated but kept for compatibility
+        # Calls are now redirected to draw_bot_chat_bubble
+        pass
+

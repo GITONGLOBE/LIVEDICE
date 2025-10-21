@@ -47,13 +47,16 @@ class InGameUI(UIInterface):
     Coordinates all UI modules and manages game display.
     """
     
-    def __init__(self, human_players, ai_players):
+    def __init__(self, human_players, ai_players, endgoal=4000, ruleset="STANDARD", bot_difficulty="NORMAL"):
         """
         Initialize the in-game UI.
         
         Args:
-            human_players: List of human Player instances
-            ai_players: List of AI Player instances
+            human_players: Number of human players
+            ai_players: Number of AI players
+            endgoal: Target score to win (2000, 4000, or 8000)
+            ruleset: Scoring rules to use (SIMPLE, STANDARD, or ADVANCED)
+            bot_difficulty: AI difficulty level (EASY, NORMAL, or HARD)
         """
         pygame.init()
         self.WINDOW_WIDTH = 1920
@@ -61,8 +64,12 @@ class InGameUI(UIInterface):
         self.screen = pygame.display.set_mode((self.WINDOW_WIDTH, self.WINDOW_HEIGHT))
         pygame.display.set_caption("• LIVEDICE [ IF ]")
 
+        # Store player counts and game configuration
         self.human_players = human_players
         self.ai_players = ai_players
+        self.endgoal = int(endgoal) if endgoal else 4000
+        self.ruleset = ruleset if ruleset else "STANDARD"
+        self.bot_difficulty = bot_difficulty if bot_difficulty else "NORMAL"
         
         # Initialize modular components
         self._setup_ui_modules()
@@ -124,6 +131,12 @@ class InGameUI(UIInterface):
             'red': [pygame.image.load(os.path.join("assets", f"dice_olgreen_{i}_70px.png")) for i in range(1, 7)],
             'blue': [pygame.image.load(os.path.join("assets", f"dice_blueolgreen_{i}_70px.png")) for i in range(1, 7)]
         }
+        
+        # Small dice images for game log (36px)
+        self.dice_images_small = {
+            'white': [pygame.transform.scale(pygame.image.load(os.path.join("assets", f"dice_olgreen_{i}_70px.png")), (36, 36)) for i in range(1, 7)],
+            'green': [pygame.transform.scale(pygame.image.load(os.path.join("assets", f"dice_olgreen_{i}_70px.png")), (36, 36)) for i in range(1, 7)]
+        }
 
         # Dice positions in stash plank
         self.stash_dice_positions = [
@@ -154,6 +167,9 @@ class InGameUI(UIInterface):
         self.bot_thinking_message = ""
         self.bot_decision_message = ""
         
+        
+        # Return to menu flag (for X button)
+        self.return_to_menu = False
         # Dice rectangles for click detection
         self.dice_rects = []
     
@@ -285,8 +301,8 @@ class InGameUI(UIInterface):
         self.max_visible_lines = 24
 
     def setup_game(self):
-        """Initialize game state manager"""
-        self.game_state = GameStateManager(self, self.human_players, self.ai_players)
+        """Initialize game state manager with configuration"""
+        self.game_state = GameStateManager(self, self.human_players, self.ai_players, self.endgoal, self.ruleset, self.bot_difficulty)
         self.game_state.set_active_task("Click START TURN to begin your turn")
 
     def setup_scoring_info_button(self):
@@ -367,7 +383,7 @@ class InGameUI(UIInterface):
         rolls = self.game_state.real_time_counters.turn_rolls_var
         stashes = self.game_state.real_time_counters.stashstashtimes_vscore
         
-        current_player.record_turn(self.game_state.current_turn_number, turn_score, rolls, stashes)
+        # current_player.record_turn(self.game_state.current_turn_number, turn_score, rolls, stashes) # DISABLED: Causes double recording
         self.game_state.total_turns += 1
         
         log_entry = f"{current_player.user.username} scored {UIHelpers.format_number(turn_score)} points in turn {UIHelpers.format_number(self.game_state.current_turn_number)} with {UIHelpers.format_number(rolls)} rolls and {UIHelpers.format_number(stashes)} stashes"

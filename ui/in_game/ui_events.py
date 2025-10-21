@@ -8,6 +8,7 @@ import pygame
 import sys
 import time
 from typing import List, Tuple, Optional
+from ui.in_game.ui_helpers import UIHelpers
 from games.livedice_f.livedice_f_rules import GameStateEnum
 
 
@@ -82,6 +83,13 @@ class UIEvents:
         """Handle left mouse button clicks"""
         # Import StashState locally to avoid circular import
         from ui.in_game.in_game_ui import StashState
+        
+        # X BUTTON - Return to menu (HIGHEST PRIORITY - check first)
+        if hasattr(self.ui.drawing, 'x_button_rect'):
+            if self.ui.drawing.x_button_rect.collidepoint(pos):
+                print("X button clicked - returning to startup menu")
+                self.ui.return_to_menu = True
+                return
         
         # Color buttons
         for color, button in self.ui.color_buttons.items():
@@ -186,7 +194,7 @@ class UIEvents:
             return
 
         # FIXED: Use self.get_clicked_dice instead of self.ui.get_clicked_dice
-        clicked_dice = self.get_clicked_dice(pos)
+        clicked_dice = UIHelpers.get_clicked_dice(pos, self.ui.dice_rects)
         
         if clicked_dice is not None:
             current_time = time.time()
@@ -203,7 +211,7 @@ class UIEvents:
                 print(f"Double-click detected on dice {clicked_dice} - instant stashing!")
                 
                 # FIXED: Use self.get_dice_collection instead of self.ui.get_dice_collection
-                dice_collection = self.get_dice_collection(clicked_dice)
+                dice_collection = UIHelpers.get_dice_collection(self.ui.game_state.dice_values, clicked_dice)
                 
                 # Check if these dice can be stashed
                 stashable_dice = self.ui.game_state.referee.get_stashable_dice(self.ui.game_state.dice_values)
@@ -225,7 +233,7 @@ class UIEvents:
             else:
                 # SINGLE CLICK: Normal selection/deselection behavior
                 # FIXED: Use self.get_dice_collection instead of self.ui.get_dice_collection
-                dice_collection = self.get_dice_collection(clicked_dice)
+                dice_collection = UIHelpers.get_dice_collection(self.ui.game_state.dice_values, clicked_dice)
                 
                 if self.ui.game_state.referee.can_select_dice(clicked_dice):
                     if set(dice_collection).issubset(set(self.ui.game_state.selected_dice)):
@@ -249,26 +257,6 @@ class UIEvents:
 
         # Update UI components
         self.ui.update_bank_button()
-
-    def get_dice_collection(self, dice_index: int) -> List[int]:
-        """Get collection of dice that should be selected together"""
-        if dice_index >= len(self.ui.game_state.dice_values):
-            return []
-        
-        dice_value = self.ui.game_state.dice_values[dice_index]
-        collection = [i for i, v in enumerate(self.ui.game_state.dice_values) if v == dice_value]
-        if len(collection) >= 3:
-            return collection[:3]
-        elif len(collection) == 2 and dice_value == 6:
-            return collection
-        return [dice_index]
-
-    def get_clicked_dice(self, pos: Tuple[int, int]) -> Optional[int]:
-        """Get the index of the clicked dice"""
-        for i, dice_rect in enumerate(self.ui.dice_rects):
-            if dice_rect.collidepoint(pos):
-                return i
-        return None
 
     def handle_log_scroll(self, event):
         """Handle log scrolling"""
@@ -303,20 +291,5 @@ class UIEvents:
             self.ui.log_scroll_y = int(scroll_ratio * max_scroll)
             self.ui.log_scroll_y = min(max_scroll, max(0, self.ui.log_scroll_y))
 
-    def get_hovered_combination(self, mouse_pos: Tuple[int, int]) -> Tuple[List[int], List[int]]:
-        """Get which dice are currently being hovered over"""
-        hovered_dice = []
-        hovered_combination = []
-
-        if self.ui.dice_rects and self.ui.game_state.dice_values:
-            for i, dice_rect in enumerate(self.ui.dice_rects):
-                if dice_rect.collidepoint(mouse_pos):
-                    if i < len(self.ui.game_state.dice_values):
-                        # FIXED: Use self.get_dice_collection instead of self.ui.get_dice_collection
-                        hovered_dice = self.get_dice_collection(i)
-                        hovered_combination = hovered_dice
-                    break
-
-        return hovered_dice, hovered_combination
 
     # BOT AI HANDLING

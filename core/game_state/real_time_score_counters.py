@@ -26,7 +26,7 @@ class RealTimeScoreCounters:
         self.stashplusselection_vscore = self.stash_vscore + self.stashselection_vscore
         self.stasheddice_var = len(game_state.current_player.stashed_dice)
         self.rollcupdice_var = 6 - self.stasheddice_var
-        self.turn_nr_var = game_state.current_turn_number
+        self.turn_nr_var = game_state.current_player.turn_count + 1
         self.game_turns_var = game_state.get_game_turns()
         self.stashstashtimes_vscore = game_state.current_player.full_stashes_moved
         self.turn_scorerecord = self.turn_vscore

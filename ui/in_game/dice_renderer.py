@@ -68,15 +68,47 @@ class DiceRenderer:
                     y += self.dice_size['stash'] + 5
 
     def render_dice_in_log(self, surface, dice_info, x, y):
+        """
+        Render a dice image in the game log.
+        
+        Args:
+            surface: Surface to render on
+            dice_info: Dice info string (format: "white_4" or "green_6")
+            x: X position
+            y: Y position
+            
+        Returns:
+            Updated x position after rendering
+        """
         try:
-            color, value = dice_info.lower().split('_')  # Convert to lowercase
+            # Parse dice_info format: "white_4" or "green_6"
+            dice_info = dice_info.lower().strip()
+            parts = dice_info.split('_')
+            
+            if len(parts) != 2:
+                # Invalid format, return without rendering
+                return x
+            
+            color, value_str = parts
+            
+            # Validate value
+            value = int(value_str)
+            if value < 1 or value > 6:
+                return x
+            
+            # Build the dice key for the surfaces dictionary
             dice_key = f'{color}_{value}'
+            
+            # Get the correct dice image from dice_surfaces['log']
             dice_surface = self.dice_surfaces['log'][dice_key]
+            
+            # Render the dice image
             surface.blit(dice_surface, (x, y))
+            
+            # Return new x position (dice width + spacing)
             return x + self.dice_size['log'] + 5
-        except (KeyError, ValueError) as e:
-            print(f"Error rendering dice in log: {e}. Dice info: {dice_info}")
-            # Render a placeholder or error indicator
-            error_surface = self.log_font.render("?", True, (255, 0, 0))
-            surface.blit(error_surface, (x, y))
-            return x + self.dice_size['log'] + 5
+            
+        except (KeyError, IndexError, ValueError) as e:
+            # If image not found or parsing failed, skip rendering
+            print(f"Warning: Could not render dice '{dice_info}': {e}")
+            return x

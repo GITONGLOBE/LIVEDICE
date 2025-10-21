@@ -25,7 +25,9 @@ class Player:
         self.full_stashes_moved_this_turn = 0
 
     def record_turn(self, turn_number: int, banked_score: int, rolls: int, full_stashes_moved: int):
-        self.turn_scores[turn_number] = {
+        # FIXED: Use player's own turn_count + 1 for recording
+        player_turn = self.turn_count + 1
+        self.turn_scores[player_turn] = {
             "SCORE": banked_score,
             "ROLLS": rolls,
             "STASHES": full_stashes_moved
@@ -33,7 +35,7 @@ class Player:
         self.turn_count += 1
         self.banked_full_stashes += full_stashes_moved
         self.full_stashes_moved_this_turn = 0
-        self.game_state_manager.add_log_entry(f"{self.user.username} recorded turn {self.game_state_manager.format_number(turn_number)}: Score: {self.game_state_manager.format_number(banked_score)}, Rolls: {self.game_state_manager.format_number(rolls)}, Stashes: {self.game_state_manager.format_number(full_stashes_moved)}")
+        self.game_state_manager.add_log_entry(f"{self.user.username} recorded turn {self.game_state_manager.format_number(player_turn)}: Score: {self.game_state_manager.format_number(banked_score)}, Rolls: {self.game_state_manager.format_number(rolls)}, Stashes: {self.game_state_manager.format_number(full_stashes_moved)}")
 
     def get_total_banked_full_stashes(self) -> int:
         return self.banked_full_stashes
@@ -56,7 +58,9 @@ class Player:
         return self.turn_scores.get(turn_number, {"SCORE": 0, "ROLLS": 0, "STASHES": 0})
 
     def is_bot(self) -> bool:
-        return self.user.username.startswith("@GO-BOT")
+        # FIXED: Check for new bot naming format with difficulty prefix
+        # Supports: EASY-GO-BOT-1, NORMAL-GO-BOT-2, HARD-GO-BOT-3, etc.
+        return "GO-BOT" in self.user.username
 
     def reset_turn(self):
         self.stashed_dice = []
@@ -70,7 +74,7 @@ class Player:
         self.stashed_dice_this_roll = False
         
 class GameStateManager:
-    def __init__(self, ui, human_players, ai_players):
+    def __init__(self, ui, human_players, ai_players, endgoal=4000, ruleset="STANDARD", bot_difficulty="NORMAL"):
         self.ui = ui
         self.players: List[Player] = []
         self.current_player_index = 0
@@ -84,6 +88,12 @@ class GameStateManager:
         self.total_turns = 0
         self.game_log: List[str] = []
         self.active_task = ""
+        
+        # Store game configuration (ensure endgoal is integer)
+        self.endgoal = int(endgoal) if endgoal else 4000
+        self.ruleset = ruleset if ruleset else "STANDARD"
+        self.bot_difficulty = bot_difficulty if bot_difficulty else "NORMAL"
+        
         self.referee = GameReferee(self)
         self.real_time_counters = RealTimeScoreCounters()
         self.current_game_state = GameStateEnum.START_TURN
@@ -91,14 +101,17 @@ class GameStateManager:
         self.current_stashable_combinations = []
         self.current_turn_number = 1
         self.ui_needs_update = False
+        self.can_roll_once = False
 
         # Add human players
         for i in range(human_players):
             self.add_player(User(f"@VIDEO-GAMER-{i+1}", f"videogamer{i+1}@example.com", "password"))
 
-        # Add AI players
+        # FIXED: Add AI players with difficulty prefix
         for i in range(ai_players):
-            self.add_player(User(f"@GO-BOT-{i+1}", f"gobot{i+1}@example.com", "password"))
+            # Bot names now include difficulty: EASY-GO-BOT-1, NORMAL-GO-BOT-2, HARD-GO-BOT-3
+            username = f"{self.bot_difficulty.upper()}-GO-BOT-{i+1}"
+            self.add_player(User(username, f"gobot{i+1}@example.com", "password"))
 
         self.determine_starting_player()
         self.set_active_task("Click START TURN to begin your turn")
@@ -110,96 +123,74 @@ class GameStateManager:
         
         if human_players:
             self.current_player_index = self.players.index(human_players[0])
-        elif bot_players:
-            self.current_player_index = self.players.index(bot_players[0])
         else:
-            raise ValueError("No players in the game")
-        
-        self.players[self.current_player_index].is_active = True
-        # We'll add this log entry later, after UI is fully initialized
-        # self.add_log_entry(f"{self.players[self.current_player_index].user.username} starts the game")
+            self.current_player_index = 0
+
+        self.current_player.is_active = True
+
+    def add_player(self, user: User):
+        player = Player(user, len(self.players) + 1, self)
+        self.players.append(player)
 
     @property
     def current_player(self) -> Player:
         return self.players[self.current_player_index]
 
-    @property
-    def can_roll_once(self):
-        return self.current_game_state in [
-            GameStateEnum.STASHCHOICE_STASHED_ALL,
-            GameStateEnum.STASHCHOICE_STASHED_PARTIAL
-        ]
-
-    def add_player(self, user: User):
-        player_number = len(self.players) + 1
-        new_player = Player(user, player_number, self)
-        self.players.append(new_player)
-        if user.username == "@VIDEO-GAMER":
-            self.players[0] = new_player  # Ensure @VIDEO-GAMER is always P1
-        elif user.username == "@GO-BOT":
-            self.players[1] = new_player  # Ensure @GO-BOT is always P2
-
     def next_player(self):
-        print(f"Before next_player: current_turn_number = {self.current_turn_number}, current_player_index = {self.current_player_index}")
         self.current_player.is_active = False
-        
-        # Determine the next player based on the specified order
-        human_players = [i for i, p in enumerate(self.players) if not p.is_bot()]
-        bot_players = [i for i, p in enumerate(self.players) if p.is_bot()]
-        all_players = human_players + bot_players
-        
-        current_index = all_players.index(self.current_player_index)
-        next_index = (current_index + 1) % len(all_players)
-        self.current_player_index = all_players[next_index]
-        
+        self.current_player.reset_turn()
+        self.current_player_index = (self.current_player_index + 1) % len(self.players)
         self.current_player.is_active = True
-        
-        if next_index < current_index:  # We've gone through all players
-            self.increment_turn()
-        
-        self.reset_turn_state()
-        self.referee.set_game_state(GameStateEnum.NEXTUP_READYUP)
-        print(f"After next_player: current_turn_number = {self.current_turn_number}, current_player_index = {self.current_player_index}")
-
-    def increment_turn(self):
-        print(f"Before increment_turn: current_turn_number = {self.current_turn_number}")
         self.current_turn_number += 1
-        for player in self.players:
-            if self.current_turn_number - 1 not in player.turn_scores:
-                player.record_turn(self.current_turn_number - 1, 0, 0, 0)  # Record an empty turn if not already recorded
-        print(f"After increment_turn: current_turn_number = {self.current_turn_number}")
-
-    def reset_turn_state(self):
         self.turn_started = False
         self.turn_banked = False
         self.bust_state = False
         self.busted_player = None
         self.busted_lost_score = 0
-        self.dice_values = []
-        self.selected_dice = []
-        self.current_player.reset_turn()
-        self.total_turns += 1
-        self.real_time_counters.reset()
-        self.ui.use_start_turn_button = True
+        self.can_roll_once = False
+        # FIXED: Update counters so new player's turn number shows immediately
+        self.real_time_counters.update_counters(self)
+
+    def set_active_task(self, task: str):
+        self.active_task = task
+
+    def format_dice_for_log(self, dice_str: str) -> str:
+        import re
+        pattern = r'\[(\d+)([gw])\]'
+        def replace(match):
+            value = match.group(1)
+            color = 'green' if match.group(2) == 'g' else 'white'
+            return f'<DICE>{color}_{value}</DICE>'
+        return re.sub(pattern, replace, dice_str)
+
+    def add_log_entry(self, entry: str, prefix: str = None):
+        if prefix:
+            formatted_entry = f"{prefix}: {entry}"
+        else:
+            formatted_entry = entry
+        formatted_entry = self.format_dice_for_log(formatted_entry)
+        self.game_log.append(formatted_entry)
+        if self.ui:
+            self.ui.events.scroll_log_to_bottom()
+
+    def format_number(self, number: int) -> str:
+        return str(number).replace('0', 'O')
+
+    def format_dice(self, dice_values: List[int]) -> str:
+        formatted = []
+        for value in dice_values:
+            formatted.append(f'<DICE>green_{value}</DICE>')
+        return ' '.join(formatted)
 
     def reset_full_stashes_moved(self):
         self.current_player.full_stashes_moved = 0
+        self.current_player.full_stashes_moved_this_turn = 0
 
-    def bank_points(self):
-        total_score = self.referee.calculate_turn_score()
-        stash_stash_points, full_stashes_moved = self.referee.get_stash_stash_info()
-        self.current_player.record_turn(self.current_turn_number, total_score, self.current_player.roll_count, self.current_player.full_stashes_moved_this_turn)
-        self.add_log_entry(f"{self.current_player.user.username} BANKED {self.format_number(total_score)} POINTS (Stash Stash: {self.format_number(stash_stash_points)}, Full stashes: {self.format_number(self.current_player.full_stashes_moved_this_turn)})")
-        self.turn_banked = True
-        self.referee.set_game_state(GameStateEnum.BANKED_TURN_SUMMARY)
-        self.real_time_counters.update_counters(self)
-        self.current_player.stash_stash = 0  # Reset stash_stash after banking
-        
     def bust(self):
         self.bust_state = True
         self.busted_player = self.current_player
         self.busted_lost_score = self.referee.calculate_turn_score()
-        self.current_player.record_turn(self.current_turn_number, 0, self.current_player.roll_count, 0)
+        self.current_player.record_turn(self.current_player.turn_count + 1, 0, self.current_player.roll_count, 0)
         self.add_log_entry(f"{self.current_player.user.username} busted and lost {self.format_number(self.busted_lost_score)} points")
         self.referee.set_game_state(GameStateEnum.BUST_TURN_SUMMARY)
         self.reset_full_stashes_moved()  # Add this line
@@ -219,6 +210,7 @@ class GameStateManager:
         
         self.selected_dice = []
         
+        # CRITICAL: Pass ruleset to get_scoring_combinations and get_stashable_dice
         self.current_stashable_combinations = self.referee.get_scoring_combinations(self.dice_values)
         self.current_stashable_dice = self.referee.get_stashable_dice(self.dice_values)
         
@@ -354,144 +346,17 @@ class GameStateManager:
                 if comb.startswith("TRIPLE") and dice_values.count(value) >= 3:
                     is_stashable = True
                     break
-                elif comb == "DOUBLE 6" and value == 6 and dice_values.count(6) >= 2:
+                elif comb == "DOUBLE 6" and value == 6:
                     is_stashable = True
                     break
-                elif comb.startswith("SINGLE") and value in [1, 5]:
+                elif comb.startswith("SINGLE 1") and value == 1:
                     is_stashable = True
                     break
-            formatted_dice.append(self.format_single_die(value, is_stashable))
+                elif comb.startswith("SINGLE 5") and value == 5:
+                    is_stashable = True
+                    break
+            
+            color = "green" if is_stashable else "white"
+            formatted_dice.append(f"{color}_{value}")
+        
         return formatted_dice
-
-    def format_dice_for_stash(self, dice_values):
-        return [self.format_single_die(value, True) for value in dice_values]
-
-    def format_dice_for_log(self, entry):
-        words = entry.split()
-        formatted_words = []
-        for word in words:
-            if word.startswith("[") and word.endswith("]"):
-                dice_value = word[1:-2]  # Remove the last character (g or w)
-                if dice_value.isdigit() and 1 <= int(dice_value) <= 6:
-                    is_stashable = word.endswith("g]")
-                    formatted_words.append(self.format_single_die(int(dice_value), is_stashable))
-                else:
-                    formatted_words.append(word)
-            else:
-                formatted_words.append(word)
-        return " ".join(formatted_words)
-
-    def format_single_die(self, value, is_stashable):
-        color = "green" if is_stashable else "white"
-        return f"<dice>{color}_{value}</dice>"
-
-    def add_log_entry(self, entry: str, prefix=None):
-        if not entry.strip():  # Skip empty entries
-            return
-
-        if prefix is None:
-            prefix = "@G-REF."
-        
-        formatted_entry = entry.upper()
-        
-        # Replace all numbers in the entry
-        words = formatted_entry.split()
-        formatted_words = []
-        for word in words:
-            if word.isdigit():
-                formatted_words.append(self.format_number(word))
-            else:
-                formatted_words.append(word)
-        formatted_entry = ' '.join(formatted_words)
-        
-        lines = formatted_entry.split('\n')
-        
-        for i, line in enumerate(lines):
-            if i == 0:
-                player_name = line.split()[0] if line.split() and line.split()[0].startswith("@") else ""
-                if prefix != "@G-REF.":
-                    log_entry = f'<prefix>{prefix}</prefix> {line}'
-                elif player_name:
-                    log_entry = f'<prefix>{prefix}</prefix> <player>{player_name}</player> {" ".join(line.split()[1:])}'
-                else:
-                    log_entry = f'<prefix>{prefix}</prefix> {line}'
-            else:
-                log_entry = line
-            
-            log_entry = log_entry.replace("<green>", "<greentext>").replace("</green>", "</greentext>")
-            log_entry = log_entry.replace("<dice>", "<DICE>").replace("</dice>", "</DICE>")
-            
-            self.game_log.append(log_entry)
-        
-        if len(self.game_log) > 100:
-            self.game_log = self.game_log[-100:]
-        self.ui_needs_update = True
-        if hasattr(self, 'ui') and self.ui:
-            self.ui.scroll_log_to_bottom()
-
-    def format_dice(self, dice_values):
-        stashable_dice = self.referee.get_stashable_dice(dice_values)
-        return ' '.join([f'<dice>{"green" if i in stashable_dice else "white"}_{self.format_number(v)}</dice>' for i, v in enumerate(dice_values)])
-
-    def format_number(self, number):
-        return str(number).replace('0', 'O')
-        
-    def handle_error(self, error_message: str):
-        print(f"Error: {error_message}")
-        self.add_log_entry(f"ERROR: {error_message}")
-        # You might want to implement additional error handling logic here
-
-    def validate_action(self, action: str) -> bool:
-        if action == "ROLL":
-            return self.referee.can_roll()
-        elif action == "STASH":
-            return self.referee.can_stash()
-        elif action == "BANK":
-            return self.referee.can_bank()
-        elif action == "START_NEW_STASH":
-            return self.referee.is_full_stash()
-        else:
-            return False
-
-    def perform_action(self, action: str):
-        if not self.validate_action(action):
-            self.handle_error(f"Invalid action: {action}")
-            return
-
-        if action == "ROLL":
-            self.roll_dice()
-        elif action == "STASH":
-            self.stash_dice(self.selected_dice)
-        elif action == "BANK":
-            self.bank_points()
-        elif action == "START_NEW_STASH":
-            self.start_new_stash()
-        else:
-            self.handle_error(f"Unknown action: {action}")
-
-    def update_game_state(self):
-        if self.is_game_over():
-            self.referee.set_game_state(GameStateEnum.END_GAME_SUMMARY)
-        elif self.bust_state:
-            self.referee.set_game_state(GameStateEnum.BUST_TURN_SUMMARY)
-        elif self.turn_banked:
-            self.referee.set_game_state(GameStateEnum.BANKED_TURN_SUMMARY)
-        elif self.referee.is_full_stash():
-            self.referee.set_game_state(GameStateEnum.STASHCHOICE_STASHED_FULL)
-        elif len(self.dice_values) == 0 and self.referee.has_stashed_dice():
-            self.referee.set_game_state(GameStateEnum.STASHCHOICE_STASHED_ALL)
-        elif self.referee.get_stashable_dice(self.dice_values):
-            if self.referee.has_stashed_dice():
-                self.referee.set_game_state(GameStateEnum.ROLLRESULT_POSITIVE_STASHOPTIONS_HAVESTASHED)
-            else:
-                self.referee.set_game_state(GameStateEnum.ROLLRESULT_POSITIVE_STASHOPTIONS)
-        else:
-            self.referee.set_game_state(GameStateEnum.STASHCHOICE_STASHED_PARTIAL)
-
-        self.real_time_counters.update_counters(self)
-
-    def calculate_turn_score(self) -> int:
-        return self.referee.calculate_turn_score()
-
-    def is_game_over(self) -> bool:
-        return self.referee.is_game_over()

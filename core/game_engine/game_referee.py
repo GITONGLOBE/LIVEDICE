@@ -36,7 +36,7 @@ class GameReferee:
         return self.calculate_turn_score()
     
     def calculate_table_score(self) -> int:
-        return LiveDiceFRules.calculate_score(self.game_state_manager.dice_values)
+        return LiveDiceFRules.calculate_score(self.game_state_manager.dice_values, False, self.game_state_manager.ruleset)
 
     def calculate_stash_score(self) -> int:
         return self.game_state_manager.current_player.get_stash_score()
@@ -53,7 +53,7 @@ class GameReferee:
         return sum(turn["SCORE"] for turn in player.turn_scores.values())
 
     def is_bust(self) -> bool:
-        return LiveDiceFRules.is_bust(self.game_state_manager.dice_values)
+        return LiveDiceFRules.is_bust(self.game_state_manager.dice_values, self.game_state_manager.ruleset)
 
     def can_stash(self) -> bool:
         return LiveDiceFRules.can_stash(self.game_state_manager.selected_dice)
@@ -62,10 +62,10 @@ class GameReferee:
         return LiveDiceFRules.is_full_stash(self.game_state_manager.current_player.stashed_dice)
 
     def get_stashable_dice(self, dice_values: List[int]) -> List[int]:
-        return LiveDiceFRules.get_stashable_dice(dice_values)
+        return LiveDiceFRules.get_stashable_dice(dice_values, self.game_state_manager.ruleset)
 
     def get_scoring_combinations(self, dice_values: List[int]) -> List[Tuple[str, int]]:
-        return LiveDiceFRules.get_scoring_combinations(dice_values)
+        return LiveDiceFRules.get_scoring_combinations(dice_values, self.game_state_manager.ruleset)
 
     def get_stash_number(self) -> str:
         return LiveDiceFRules.get_stash_number(self.game_state_manager.current_player.stash_level)
@@ -170,10 +170,10 @@ class GameReferee:
 
     def is_game_over(self) -> bool:
         player_scores = [player.get_total_score() for player in self.game_state_manager.players]
-        return LiveDiceFRules.is_game_over(player_scores)
+        return LiveDiceFRules.is_game_over(player_scores, self.game_state_manager.endgoal)
 
     def calculate_score(self, dice_values: List[int], stashed_together: bool = False) -> int:
-        return LiveDiceFRules.calculate_score(dice_values, stashed_together)
+        return LiveDiceFRules.calculate_score(dice_values, stashed_together, self.game_state_manager.ruleset)
 
     def describe_stash(self, stashed: List[int]) -> str:
         return LiveDiceFRules.describe_stash(stashed)
@@ -201,8 +201,16 @@ class GameReferee:
         if not self.validate_action(action):
             raise ValueError(f"Invalid action: {action} in game state: {self.game_state_manager.current_game_state}")
 
+        # CRITICAL FIX: Wrap roll_dice to include animation
+        if action == "ROLL":
+            # Roll the dice
+            self.game_state_manager.roll_dice()
+            # CRITICAL: Trigger animation after rolling
+            if hasattr(self.game_state_manager, 'ui') and self.game_state_manager.ui:
+                self.game_state_manager.ui.animate_dice_roll()
+            return
+
         action_methods = {
-            "ROLL": self.game_state_manager.roll_dice,
             "STASH": lambda: self.game_state_manager.stash_dice(self.game_state_manager.selected_dice),
             "BANK": self.bank_points,
             "START_NEW_STASH": self.start_new_stash,
@@ -235,7 +243,7 @@ class GameReferee:
         self.game_state_manager.busted_player = self.game_state_manager.current_player
         self.game_state_manager.busted_lost_score = self.calculate_turn_score()
         self.game_state_manager.current_player.record_turn(
-            self.game_state_manager.current_turn_number, 0, 
+            self.game_state_manager.current_player.turn_count + 1, 0, 
             self.game_state_manager.current_player.roll_count, 0
         )
         self.set_game_state(GameStateEnum.BUST_TURN_SUMMARY)
@@ -244,7 +252,7 @@ class GameReferee:
         current_player = self.game_state_manager.current_player
         total_score = self.calculate_turn_score()
         current_player.record_turn(
-            self.game_state_manager.current_turn_number, total_score, 
+            current_player.turn_count + 1, total_score, 
             current_player.roll_count, current_player.full_stashes_moved_this_turn
         )
         self.game_state_manager.turn_banked = True

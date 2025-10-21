@@ -43,13 +43,31 @@ class LiveDiceFRules:
         ]
 
     @staticmethod
-    def calculate_score(dice_values: Union[List[int], int], stashed_together: bool = False) -> int:
+    def calculate_score(dice_values: Union[List[int], int], stashed_together: bool = False, ruleset: str = "STANDARD") -> int:
+        """
+        Calculate score for given dice values.
+        
+        Args:
+            dice_values: Single die or list of dice values
+            stashed_together: If True, assumes dice are being stashed as a group
+            ruleset: Game ruleset - "SIMPLE", "STANDARD", or "ADVANCED"
+            
+        Returns:
+            Total score
+        """
         if isinstance(dice_values, int):
             dice_values = [dice_values]
         
         score = 0
         counts = [dice_values.count(i) for i in range(1, 7)]
         
+        # SIMPLE MODE: Only 1s and 5s score points
+        if ruleset == "SIMPLE":
+            score += counts[0] * 100  # 1s
+            score += counts[4] * 50   # 5s
+            return score
+        
+        # STANDARD and ADVANCED modes: Full scoring rules
         # Check for triples
         for i, count in enumerate(counts):
             if count >= 3:
@@ -72,10 +90,29 @@ class LiveDiceFRules:
         return score
 
     @staticmethod
-    def get_scoring_combinations(dice_values: List[int]) -> List[Tuple[str, int]]:
+    def get_scoring_combinations(dice_values: List[int], ruleset: str = "STANDARD") -> List[Tuple[str, int]]:
+        """
+        Get all scoring combinations in the dice.
+        
+        Args:
+            dice_values: List of dice values
+            ruleset: Game ruleset - "SIMPLE", "STANDARD", or "ADVANCED"
+            
+        Returns:
+            List of tuples (combination_name, score)
+        """
         counts = [dice_values.count(i) for i in range(1, 7)]
         combinations = []
 
+        # SIMPLE MODE: Only 1s and 5s
+        if ruleset == "SIMPLE":
+            if counts[0] > 0:
+                combinations.append((f"SINGLE 1{'s' if counts[0] > 1 else ''}", counts[0] * 100))
+            if counts[4] > 0:
+                combinations.append((f"SINGLE 5{'s' if counts[4] > 1 else ''}", counts[4] * 50))
+            return combinations
+
+        # STANDARD and ADVANCED modes: Full scoring
         # Check for triples
         for i, count in enumerate(counts):
             if count >= 3:
@@ -94,10 +131,28 @@ class LiveDiceFRules:
         return combinations
 
     @staticmethod
-    def get_stashable_dice(dice_values: List[int]) -> List[int]:
+    def get_stashable_dice(dice_values: List[int], ruleset: str = "STANDARD") -> List[int]:
+        """
+        Get indices of stashable dice.
+        
+        Args:
+            dice_values: List of dice values
+            ruleset: Game ruleset - "SIMPLE", "STANDARD", or "ADVANCED"
+            
+        Returns:
+            List of indices of stashable dice
+        """
         stashable = []
         counts = [dice_values.count(i) for i in range(1, 7)]
         
+        # SIMPLE MODE: Only 1s and 5s are stashable
+        if ruleset == "SIMPLE":
+            # Only add 1s and 5s
+            stashable.extend([j for j, v in enumerate(dice_values) if v == 1])  # 1's
+            stashable.extend([j for j, v in enumerate(dice_values) if v == 5])  # 5's
+            return sorted(list(set(stashable)))
+        
+        # STANDARD and ADVANCED modes: Full stashing rules
         for i, count in enumerate(counts):
             if count >= 3:
                 stashable.extend([j for j, v in enumerate(dice_values) if v == i + 1][:3])
@@ -154,8 +209,9 @@ class LiveDiceFRules:
         return has_stashed_this_turn
 
     @staticmethod
-    def is_bust(dice_values: List[int]) -> bool:
-        return len(LiveDiceFRules.get_stashable_dice(dice_values)) == 0
+    def is_bust(dice_values: List[int], ruleset: str = "STANDARD") -> bool:
+        """Check if dice roll is a bust (no scoring dice)"""
+        return len(LiveDiceFRules.get_stashable_dice(dice_values, ruleset)) == 0
 
     @staticmethod
     def can_bank(has_stashed_this_turn: bool, virtual_score: int) -> bool:
@@ -178,8 +234,9 @@ class LiveDiceFRules:
         return not turn_started or (len(dice_values) == 0 and len(stashed_dice) == 0)
 
     @staticmethod
-    def is_game_over(player_scores: List[int]) -> bool:
-        return any(score >= LiveDiceFRules.TARGET_SCORE for score in player_scores)
+    def is_game_over(player_scores: List[int], endgoal: int = 4000) -> bool:
+        """Check if game is over (any player reached endgoal)"""
+        return any(score >= endgoal for score in player_scores)
 
     @staticmethod
     def get_dice_for_combination(dice_values: List[int], combination_name: str) -> List[int]:

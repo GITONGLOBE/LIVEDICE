@@ -45,7 +45,7 @@ class UISections:
             # Right Panel Sections
             "DICECUP": pygame.Rect(1460, 20, 440, 400),
             "GAME_DATA_LOG_FRAME": pygame.Rect(1460, 440, 440, 620),
-            "GAME_DATA_LOG": pygame.Rect(1480, 460, 400, 580),
+            "GAME_DATA_LOG": pygame.Rect(1460, 440, 440, 620),
             
             # Popup Sections (centered in middle panel)
             "READY_UP_POPUP": pygame.Rect(740, 365, 440, 350),  # Blue themed popup
