@@ -162,12 +162,7 @@ class InGameUI(UIInterface):
 
         self.use_start_turn_button = True
         self.last_update_time = time.time()
-
-        # Bot messages
-        self.bot_thinking_message = ""
-        self.bot_decision_message = ""
-        
-        
+        # Bot messages migrated to message_manager in game_state
         # Return to menu flag (for X button)
         self.return_to_menu = False
         # Dice rectangles for click detection

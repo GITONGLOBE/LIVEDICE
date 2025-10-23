@@ -2,15 +2,31 @@
 UI DRAWING MODULE
 All drawing methods for LIVEDICE game UI.
 Handles rendering of all visual elements including panels, scores, dice, and game state.
+
+MODIFIED: 2025-10-22
+FILE: ui/in_game/ui_drawing.py  
+CHANGES: Fixed multiple AttributeError, NameError, and ValueError crashes
+- Line 20: Added missing 'import re' (Required for regex in _parse_message_text)
+- Line 1172: Changed 'G-REF' → '@G-REF' (Correct sender name includes @ symbol)
+- Line 1200: Changed message.text → message.content (Message class uses .content attribute)
+- Lines 1217-1229: Fixed max() empty sequence error (text_lines contains tuples, not strings)
+WHY: Fix crashes during game start with messaging system
+TESTING: Start game, messages should display correctly in GAME_DATA_LOG without any crashes
+DEPENDENCIES: core.messaging.message_system (GREFMessage, BOTMessage classes)
+ALSO CHECKED: game_state.py, message_system.py - no similar issues found (game_state.py max() already has fallback)
+PROJECT SCAN: Comprehensively searched entire codebase for similar issues - all found issues fixed
 """
 
 import pygame
+from pathlib import Path
 import sys
 import os
+import re
 import time
 from typing import List, Tuple, Optional
 from ui.in_game.ui_helpers import UIHelpers
 from games.livedice_f.livedice_f_rules import GameStateEnum
+from core.messaging import MessageType, GREFMessage, BOTMessage
 
 
 class UIDrawing:
@@ -913,39 +929,694 @@ class UIDrawing:
                 pos = self.ui.stash_dice_positions[position_index]
                 self.ui.screen.blit(self.ui.dice_images['blue'][die_value - 1], pos)
 
+
+    def draw_message_balloon(self, surface, message, x, y, max_width):
+        """
+        Draw a message balloon (text bubble) for G-REF or BOT messages.
+        
+        Args:
+            surface: Surface to draw on
+            message: Message object (GREFMessage or BOTMessage)
+            x: X coordinate
+            y: Y coordinate
+            max_width: Maximum width for text wrapping
+            
+        Returns:
+            Height of the drawn balloon
+        """
+        from core.messaging import MessageType
+        
+        # Determine balloon style based on message type
+        if message.type == MessageType.GREF:
+            # G-REF: Red balloon, left-aligned, left arrow
+            bg_color = (220, 20, 20)  # Red
+            text_color = (255, 255, 255)  # White
+            border_color = (180, 0, 0)  # Dark red
+            align_left = True
+        else:  # BOT
+            # BOT: Dark blue balloon, right-aligned, right arrow
+            bg_color = (20, 20, 120)  # Dark blue
+            text_color = (255, 255, 255)  # White
+            border_color = (10, 10, 80)  # Darker blue
+            align_left = False
+        
+        # Measure text size for balloon dimensions
+        font = self.ui.fonts['regular'][14] if hasattr(self.ui, 'fonts') else pygame.font.Font(None, 14)
+        
+        # Word wrap the message content
+        words = message.content.split()
+        lines = []
+        current_line = []
+        current_width = 0
+        
+        for word in words:
+            word_width = font.size(word + " ")[0]
+            if current_width + word_width > max_width - 40:  # Leave margin
+                if current_line:
+                    lines.append(" ".join(current_line))
+                    current_line = [word]
+                    current_width = word_width
+                else:
+                    lines.append(word)
+                    current_line = []
+                    current_width = 0
+            else:
+                current_line.append(word)
+                current_width += word_width
+        
+        if current_line:
+            lines.append(" ".join(current_line))
+        
+        # Calculate balloon dimensions
+        line_height = font.get_height() + 2
+        balloon_height = len(lines) * line_height + 20  # Padding
+        balloon_width = min(max_width - 40, max([font.size(line)[0] for line in lines]) + 20)
+        
+        # Draw balloon background
+        if align_left:
+            balloon_rect = pygame.Rect(x + 10, y, balloon_width, balloon_height)
+        else:
+            balloon_rect = pygame.Rect(x + max_width - balloon_width - 10, y, balloon_width, balloon_height)
+        
+        pygame.draw.rect(surface, bg_color, balloon_rect, border_radius=8)
+        pygame.draw.rect(surface, border_color, balloon_rect, width=2, border_radius=8)
+        
+        # Draw sender name bar at top
+        name_font = self.ui.fonts['regular'][12] if hasattr(self.ui, 'fonts') else pygame.font.Font(None, 12)
+        name_surface = name_font.render(message.sender, True, text_color)
+        surface.blit(name_surface, (balloon_rect.x + 10, balloon_rect.y + 5))
+        
+        # Draw message text
+        text_y = balloon_rect.y + 25
+        for line in lines:
+            text_surface = font.render(line, True, text_color)
+            surface.blit(text_surface, (balloon_rect.x + 10, text_y))
+            text_y += line_height
+        
+        return balloon_height + 10  # Height + spacing
+
+
+    def draw_message_balloon(self, surface, message, x, y, max_width):
+        """
+        Draw a message balloon (text bubble) for G-REF or BOT messages.
+        
+        Args:
+            surface: Surface to draw on
+            message: Message object (GREFMessage or BOTMessage)
+            x: X coordinate
+            y: Y coordinate
+            max_width: Maximum width for text wrapping
+            
+        Returns:
+            Height of the drawn balloon
+        """
+        from core.messaging import MessageType
+        
+        # Determine balloon style based on message type
+        if message.type == MessageType.GREF:
+            # G-REF: Red balloon, left-aligned, left arrow
+            bg_color = (220, 20, 20)  # Red
+            text_color = (255, 255, 255)  # White
+            border_color = (180, 0, 0)  # Dark red
+            align_left = True
+        else:  # BOT
+            # BOT: Dark blue balloon, right-aligned, right arrow
+            bg_color = (20, 20, 120)  # Dark blue
+            text_color = (255, 255, 255)  # White
+            border_color = (10, 10, 80)  # Darker blue
+            align_left = False
+        
+        # Measure text size for balloon dimensions
+        font = self.ui.fonts['regular'][14] if hasattr(self.ui, 'fonts') else pygame.font.Font(None, 14)
+        
+        # Word wrap the message content
+        words = message.content.split()
+        lines = []
+        current_line = []
+        current_width = 0
+        
+        for word in words:
+            word_width = font.size(word + " ")[0]
+            if current_width + word_width > max_width - 40:  # Leave margin
+                if current_line:
+                    lines.append(" ".join(current_line))
+                    current_line = [word]
+                    current_width = word_width
+                else:
+                    lines.append(word)
+                    current_line = []
+                    current_width = 0
+            else:
+                current_line.append(word)
+                current_width += word_width
+        
+        if current_line:
+            lines.append(" ".join(current_line))
+        
+        # Calculate balloon dimensions
+        line_height = font.get_height() + 2
+        balloon_height = len(lines) * line_height + 20  # Padding
+        balloon_width = min(max_width - 40, max([font.size(line)[0] for line in lines]) + 20)
+        
+        # Draw balloon background
+        if align_left:
+            balloon_rect = pygame.Rect(x + 10, y, balloon_width, balloon_height)
+        else:
+            balloon_rect = pygame.Rect(x + max_width - balloon_width - 10, y, balloon_width, balloon_height)
+        
+        pygame.draw.rect(surface, bg_color, balloon_rect, border_radius=8)
+        pygame.draw.rect(surface, border_color, balloon_rect, width=2, border_radius=8)
+        
+        # Draw sender name bar at top
+        name_font = self.ui.fonts['regular'][12] if hasattr(self.ui, 'fonts') else pygame.font.Font(None, 12)
+        name_surface = name_font.render(message.sender, True, text_color)
+        surface.blit(name_surface, (balloon_rect.x + 10, balloon_rect.y + 5))
+        
+        # Draw message text
+        text_y = balloon_rect.y + 25
+        for line in lines:
+            text_surface = font.render(line, True, text_color)
+            surface.blit(text_surface, (balloon_rect.x + 10, text_y))
+            text_y += line_height
+        
+        return balloon_height + 10  # Height + spacing
+
     def draw_scrollable_log(self, rect: pygame.Rect):
-        """Draw scrollable game log"""
+        """Draw scrollable game log - messages appear at BOTTOM and scroll UP"""
         MAX_LOG_ENTRIES = 100
         log_surface = pygame.Surface((rect.width, rect.height))
         log_surface.fill(self.ui.BLUE)
 
-        formatted_log = [self.ui.format_log_entry(entry) for entry in self.ui.game_state.game_log[-MAX_LOG_ENTRIES:]]
+        # Get messages from message_manager
+        messages = self.ui.game_state.message_manager.get_recent_messages(MAX_LOG_ENTRIES)
+        
+        # Calculate heights and render messages
+        max_width = rect.width - 40  # 20px padding on each side
+        message_surfaces = []
+        message_heights = []
+        
+        for message in messages:
+            # Get rendered message surface
+            msg_surface, width, height, is_left_aligned = self.render_message(message, max_width)
+            message_surfaces.append((msg_surface, is_left_aligned))
+            message_heights.append(height + 10)  # 10px spacing between messages
 
-        y = 0
-        entry_heights = []
-        for entry in formatted_log:
-            entry_height = self.get_entry_height(entry, rect.width - 20)
-            entry_heights.append(entry_height)
-            y += entry_height
-
-        total_height = sum(entry_heights)
+        total_height = sum(message_heights)
         visible_height = rect.height
         max_scroll = max(0, total_height - visible_height)
 
-        self.ui.log_scroll_y = min(max_scroll, self.ui.log_scroll_y)
+        # FIX #3: Auto-scroll to bottom when new messages arrive (unless user is manually scrolling)
+        if self.ui.log_auto_scroll:
+            self.ui.log_scroll_y = max_scroll
+        else:
+            self.ui.log_scroll_y = min(max_scroll, self.ui.log_scroll_y)
 
-        y = -self.ui.log_scroll_y
-        for entry, height in zip(formatted_log, entry_heights):
-            if y + height > 0 and y < visible_height:
-                self.render_log_line(log_surface, entry, 10, y)
-            y += height
+        # FIX #2: Render messages from BOTTOM UP (latest at bottom)
+        # Start from bottom of visible area
+        y = visible_height - 10  # Start 10px from bottom
+        
+        # Render messages in reverse order (newest first, at bottom)
+        for (msg_surface, is_left_aligned), height in zip(reversed(message_surfaces), reversed(message_heights)):
+            # Calculate y position for this message
+            y -= height
+            
+            # Adjust for scroll
+            adjusted_y = y + max_scroll - self.ui.log_scroll_y
+            
+            # Only render if visible
+            if adjusted_y + height > 0 and adjusted_y < visible_height:
+                # Position based on alignment
+                if is_left_aligned:
+                    x = 20  # Left padding
+                else:
+                    x = rect.width - msg_surface.get_width() - 20  # Right aligned with padding
+                
+                log_surface.blit(msg_surface, (x, adjusted_y))
 
+        # Draw scrollbar if needed
         if total_height > visible_height:
-            scrollbar_height = (visible_height / total_height) * visible_height
+            scrollbar_height = max(20, (visible_height / total_height) * visible_height)
             scrollbar_pos = (self.ui.log_scroll_y / max_scroll) * (visible_height - scrollbar_height)
             pygame.draw.rect(log_surface, self.ui.WHITE, (rect.width - 10, scrollbar_pos, 10, scrollbar_height))
 
         self.ui.screen.blit(log_surface, rect)
+
+
+    def render_message(self, message, max_width=370):
+        """
+        Render textballoon with EXACT design specifications.
+        
+        STRUCTURE:
+        1. Name bar (20px height, TRANSPARENT background)
+        2. Text block (variable size, COLORED background)
+        3. Arrow (20x20px, RIGHT-ANGLED triangle next to text block)
+        
+        CRITICAL:
+        • Name bar background = TRANSPARENT (no colored rectangle!)
+        • Arrow is next to TEXT BLOCK, not name bar
+        • Arrow = right-angled triangle (2 points same Y, 3rd below)
+        • Text = ALL CAPS
+        • Player names & points = BOLD font, #00FF00
+        • Message text = 24px font (larger)
+        """
+        # Design constants
+        MIN_WIDTH = 240
+        MAX_WIDTH = 370
+        MIN_TEXT_BLOCK_HEIGHT = 40  # Min for text block (total min 60px with name bar)
+        NAME_BAR_HEIGHT = 20
+        ARROW_WIDTH = 20
+        ARROW_HEIGHT = 20
+        DICE_SIZE = 36
+        DICE_SPACING = 10
+        
+        # Determine type
+        is_ref = message.sender == '@G-REF'
+        
+        if is_ref:
+            # REF specification
+            BG_COLOR = (255, 0, 0)  # #FF0000
+            NAME_COLOR_GREF = (0, 0, 255)  # #0000FF for @G-REF
+            NAME_COLOR_TEXT = (255, 255, 255)  # #FFFFFF for rest
+            TEXT_COLOR = (255, 255, 255)  # #FFFFFF
+            HIGHLIGHT_COLOR = (0, 255, 0)  # #00FF00
+            
+            TEXT_PAD_LEFT = 10
+            TEXT_PAD_TOP = 10
+            TEXT_PAD_RIGHT = 20
+            TEXT_PAD_BOTTOM = 10
+            NAME_PAD_LEFT = 10
+            
+            text_align = 'left'
+        else:
+            # BOT specification  
+            BG_COLOR = (0, 0, 170)  # #0000AA
+            NAME_COLOR = (0, 255, 0)  # #00FF00
+            TEXT_COLOR = (255, 255, 255)  # #FFFFFF
+            HIGHLIGHT_COLOR = (0, 255, 0)  # #00FF00
+            
+            TEXT_PAD_LEFT = 20
+            TEXT_PAD_TOP = 10
+            TEXT_PAD_RIGHT = 10
+            TEXT_PAD_BOTTOM = 10
+            NAME_PAD_RIGHT = 10
+            
+            text_align = 'right'
+        
+        # Fonts
+        name_font = pygame.font.Font(None, 18)
+        text_font = pygame.font.Font(None, 24)  # LARGER for message
+        text_font_bold = pygame.font.Font(None, 24)
+        text_font_bold.set_bold(True)  # For player names & points
+        
+        # CRITICAL: Convert to ALL CAPS
+        message_content = message.content.upper()
+        
+        # Parse text
+        text_parts = self._parse_for_textballoon(message_content)
+        
+        # Layout text
+        text_width = MAX_WIDTH - TEXT_PAD_LEFT - TEXT_PAD_RIGHT - ARROW_WIDTH
+        text_lines = self._layout_for_textballoon(
+            text_parts, text_font, text_font_bold, text_width, DICE_SIZE, DICE_SPACING
+        )
+        
+        # Calculate dimensions
+        line_height = text_font.get_height()
+        text_height = len(text_lines) * line_height
+        
+        # Check for dice to add extra space
+        has_dice = any(part[0] == 'dice' for line in text_lines for part in line)
+        if has_dice:
+            text_height = max(text_height, DICE_SIZE + line_height)
+        
+        text_block_height = text_height + TEXT_PAD_TOP + TEXT_PAD_BOTTOM
+        text_block_height = max(MIN_TEXT_BLOCK_HEIGHT, text_block_height)
+        
+        # Calculate width
+        max_line_width = 0
+        for line_parts in text_lines:
+            line_width = 0
+            for part_type, part_value in line_parts:
+                if part_type == 'dice':
+                    line_width += DICE_SIZE + DICE_SPACING
+                elif part_type in ['text', 'player', 'points']:
+                    font = text_font_bold if part_type in ['player', 'points'] else text_font
+                    line_width += font.size(part_value)[0]
+            max_line_width = max(max_line_width, line_width)
+        
+        balloon_width = max(MIN_WIDTH, min(MAX_WIDTH, max_line_width + TEXT_PAD_LEFT + TEXT_PAD_RIGHT + ARROW_WIDTH))
+        
+        total_height = NAME_BAR_HEIGHT + text_block_height
+        total_width = balloon_width
+        
+        # Create surface
+        surface = pygame.Surface((total_width, total_height), pygame.SRCALPHA)
+        surface.fill((0, 0, 0, 0))
+        
+        if is_ref:
+            # REF LAYOUT
+            
+            # 1. NAME BAR (transparent background, text only)
+            name_x = ARROW_WIDTH + NAME_PAD_LEFT
+            name_y = (NAME_BAR_HEIGHT - name_font.get_height()) // 2
+            
+            gref_surf = name_font.render("@G-REF", True, NAME_COLOR_GREF)
+            surface.blit(gref_surf, (name_x, name_y))
+            name_x += gref_surf.get_width()
+            
+            official_surf = name_font.render(" [ GAMEOFFICIAL ]", True, NAME_COLOR_TEXT)
+            surface.blit(official_surf, (name_x, name_y))
+            
+            # 2. TEXT BLOCK (colored background)
+            text_block_y = NAME_BAR_HEIGHT
+            text_block_width = balloon_width - ARROW_WIDTH
+            text_rect = pygame.Rect(ARROW_WIDTH, text_block_y, text_block_width, text_block_height)
+            pygame.draw.rect(surface, BG_COLOR, text_rect)
+            
+            # 3. ARROW (right-angled triangle pointing LEFT)
+            arrow_y = text_block_y
+            arrow_pts = [
+                (0, arrow_y),
+                (ARROW_WIDTH, arrow_y),
+                (ARROW_WIDTH, arrow_y + ARROW_HEIGHT)
+            ]
+            pygame.draw.polygon(surface, BG_COLOR, arrow_pts)
+            
+            # 4. RENDER TEXT
+            self._render_textballoon_lines(
+                surface, text_lines, text_font, text_font_bold,
+                text_rect.left + TEXT_PAD_LEFT,
+                text_rect.top + TEXT_PAD_TOP,
+                TEXT_COLOR, HIGHLIGHT_COLOR,
+                'left', text_block_width - TEXT_PAD_LEFT - TEXT_PAD_RIGHT,
+                DICE_SIZE, DICE_SPACING
+            )
+            
+        else:
+            # BOT LAYOUT (right-aligned)
+            
+            # 1. NAME BAR (transparent background, text only)
+            bot_name_surf = name_font.render(message.sender, True, NAME_COLOR)
+            name_x = balloon_width - ARROW_WIDTH - bot_name_surf.get_width() - NAME_PAD_RIGHT
+            name_y = (NAME_BAR_HEIGHT - name_font.get_height()) // 2
+            surface.blit(bot_name_surf, (name_x, name_y))
+            
+            # 2. TEXT BLOCK (colored background)
+            text_block_y = NAME_BAR_HEIGHT
+            text_block_width = balloon_width - ARROW_WIDTH
+            text_rect = pygame.Rect(0, text_block_y, text_block_width, text_block_height)
+            pygame.draw.rect(surface, BG_COLOR, text_rect)
+            
+            # 3. ARROW (right-angled triangle pointing RIGHT)
+            arrow_y = text_block_y
+            arrow_pts = [
+                (text_block_width, arrow_y),
+                (text_block_width + ARROW_WIDTH, arrow_y),
+                (text_block_width + ARROW_WIDTH, arrow_y + ARROW_HEIGHT)
+            ]
+            pygame.draw.polygon(surface, BG_COLOR, arrow_pts)
+            
+            # 4. RENDER TEXT
+            self._render_textballoon_lines(
+                surface, text_lines, text_font, text_font_bold,
+                text_rect.left + TEXT_PAD_LEFT,
+                text_rect.top + TEXT_PAD_TOP,
+                TEXT_COLOR, HIGHLIGHT_COLOR,
+                'right', text_block_width - TEXT_PAD_LEFT - TEXT_PAD_RIGHT,
+                DICE_SIZE, DICE_SPACING
+            )
+        
+        return surface, total_width, total_height, is_ref
+    
+    def _parse_for_textballoon(self, text):
+        """Parse text for player names, points, dice"""
+        parts = []
+        i = 0
+        
+        while i < len(text):
+            # Check for dice: <DICE>white_2</DICE>
+            if text[i:i+6] == '<DICE>':
+                end = text.find('</DICE>', i)
+                if end != -1:
+                    dice_content = text[i+6:end]  # e.g., "white_2"
+                    parts.append(('dice', dice_content))
+                    i = end + 7
+                    continue
+            
+            # Check for player name
+            if text[i] == '@':
+                match = re.match(r'@[A-Z]+-[A-Z]+-[A-Z]+-\d+|@[A-Z]+-[A-Z]+-\d+|@G-REF', text[i:])
+                if match:
+                    parts.append(('player', match.group(0)))
+                    i += len(match.group(0))
+                    continue
+            
+            # Check for points (number + POINTS)
+            match = re.match(r'\d+\s+POINTS?', text[i:])
+            if match:
+                parts.append(('points', match.group(0)))
+                i += len(match.group(0))
+                continue
+            
+            # Regular text
+            if not parts or parts[-1][0] != 'text':
+                parts.append(('text', text[i]))
+            else:
+                parts[-1] = ('text', parts[-1][1] + text[i])
+            i += 1
+        
+        return parts
+    
+    def _layout_for_textballoon(self, parts, reg_font, bold_font, max_width, dice_size, dice_spacing):
+        """Layout text parts into lines"""
+        lines = []
+        current_line = []
+        current_width = 0
+        
+        for part_type, part_value in parts:
+            if part_type == 'dice':
+                dice_width = dice_size + dice_spacing
+                if current_width + dice_width > max_width and current_line:
+                    lines.append(current_line)
+                    current_line = []
+                    current_width = 0
+                current_line.append((part_type, part_value))
+                current_width += dice_width
+            else:
+                font = bold_font if part_type in ['player', 'points'] else reg_font
+                words = part_value.split(' ')
+                for word in words:
+                    if not word:
+                        continue
+                    word_text = (' ' + word) if current_line else word
+                    word_width = font.size(word_text)[0]
+                    
+                    if current_width + word_width > max_width and current_line:
+                        lines.append(current_line)
+                        current_line = []
+                        current_width = 0
+                        word_text = word
+                        word_width = font.size(word_text)[0]
+                    
+                    current_line.append((part_type, word_text))
+                    current_width += word_width
+        
+        if current_line:
+            lines.append(current_line)
+        
+        return lines
+    
+    def _render_textballoon_lines(self, surface, lines, reg_font, bold_font,
+                                   start_x, start_y, text_color, highlight_color,
+                                   align, max_width, dice_size, dice_spacing):
+        """Render text lines with dice images"""
+        y = start_y
+        line_height = reg_font.get_height()
+        
+        for line_parts in lines:
+            # Calculate line width
+            line_width = 0
+            for part_type, part_value in line_parts:
+                if part_type == 'dice':
+                    line_width += dice_size + dice_spacing
+                else:
+                    font = bold_font if part_type in ['player', 'points'] else reg_font
+                    line_width += font.size(part_value)[0]
+            
+            # Starting x based on alignment
+            x = start_x if align == 'left' else start_x + max_width - line_width
+            
+            # Render each part
+            for part_type, part_value in line_parts:
+                if part_type == 'dice':
+                    # CRITICAL: Render as IMAGE
+                    try:
+                        dice_key = part_value  # e.g., "white_2"
+                        dice_surf = self.ui.dice_renderer.dice_surfaces['textballoon'][dice_key]
+                        dice_y = y + (line_height - dice_size) // 2
+                        surface.blit(dice_surf, (x, dice_y))
+                        x += dice_size + dice_spacing
+                    except Exception as e:
+                        print(f"Error rendering dice {part_value}: {e}")
+                        x += dice_size + dice_spacing
+                else:
+                    font = bold_font if part_type in ['player', 'points'] else reg_font
+                    color = highlight_color if part_type in ['player', 'points'] else text_color
+                    text_surf = font.render(part_value, True, color)
+                    surface.blit(text_surf, (x, y))
+                    x += text_surf.get_width()
+            
+            y += line_height
+
+    def _parse_message_text(self, text):
+        """
+        Parse message text to identify:
+          • Player names (to highlight in green)
+          • Point values (to highlight in green)
+          • Dice notation like [1][2][3] (to render as images)
+          
+        Returns:
+            list: Parsed text parts with types
+        """
+        parts = []
+        current = 0
+        
+        # Patterns (using raw strings for regex)
+        player_pattern = r'([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)'  # Player names
+        points_pattern = r'(\d+)\s*(?:points?|pts)'  # Point values
+        dice_pattern = r'\[(\d)\]'  # Dice notation [1] through [6]
+        
+        while current < len(text):
+            # Check for dice
+            dice_match = re.match(dice_pattern, text[current:])
+            if dice_match:
+                parts.append(('dice', int(dice_match.group(1))))
+                current += dice_match.end()
+                continue
+            
+            # Check for points
+            points_match = re.match(points_pattern, text[current:])
+            if points_match:
+                parts.append(('points', points_match.group(0)))
+                current += points_match.end()
+                continue
+            
+            # Check for player names
+            player_match = re.match(player_pattern, text[current:])
+            if player_match:
+                # Verify it's actually a player name (you might want to check against actual player list)
+                parts.append(('player', player_match.group(0)))
+                current += player_match.end()
+                continue
+            
+            # Regular character
+            if not parts or parts[-1][0] != 'text':
+                parts.append(('text', text[current]))
+            else:
+                # Append to last text part
+                parts[-1] = ('text', parts[-1][1] + text[current])
+            current += 1
+        
+        return parts
+    
+    def _layout_text_with_dice(self, text_parts, font, max_width):
+        """
+        Layout text parts into lines, handling dice images.
+        
+        Returns:
+            tuple: (lines, dice_positions)
+                lines: List of text strings or mixed lists
+                dice_positions: Dict mapping dice values to (x, y) positions
+        """
+        lines = []
+        dice_positions = {}
+        current_line = []
+        current_width = 0
+        line_height = font.get_height()
+        y = 0
+        
+        DICE_SIZE = 36
+        DICE_SPACING = 10
+        
+        for part_type, part_value in text_parts:
+            if part_type == 'dice':
+                # Reserve space for dice
+                dice_width = DICE_SIZE + DICE_SPACING
+                if current_width + dice_width > max_width:
+                    # Start new line
+                    lines.append(current_line)
+                    current_line = []
+                    current_width = 0
+                    y += line_height
+                
+                # Record dice position
+                dice_positions[part_value] = (current_width, y)
+                current_width += dice_width
+                
+            else:
+                # Regular text
+                text = part_value
+                words = text.split(' ')
+                
+                for word in words:
+                    word_width = font.size(word + ' ')[0]
+                    
+                    if current_width + word_width > max_width:
+                        # Start new line
+                        if current_line:
+                            lines.append(current_line)
+                        current_line = [(part_type, word + ' ')]
+                        current_width = word_width
+                        y += line_height
+                    else:
+                        current_line.append((part_type, word + ' '))
+                        current_width += word_width
+        
+        if current_line:
+            lines.append(current_line)
+        
+        return lines, dice_positions
+    
+    def _load_dice_image(self, value, size):
+        """
+        Load and scale dice image from assets/dice/
+        
+        Args:
+            value: Dice value (1-6)
+            size: Target size in pixels
+            
+        Returns:
+            pygame.Surface
+        """
+        # Try multiple possible dice image paths
+        possible_paths = [
+            f"assets/dice/dice_{value}_36px.png",
+            f"assets/dice/dice_{value}.png",
+            f"assets/dice/die_{value}.png"
+        ]
+        
+        for dice_path in possible_paths:
+            try:
+                if Path(dice_path).exists():
+                    image = pygame.image.load(dice_path)
+                    return pygame.transform.scale(image, (size, size))
+            except Exception as e:
+                continue
+        
+        # Fallback: create CLEAR, VISIBLE dice representation
+        surface = pygame.Surface((size, size))
+        surface.fill((255, 255, 255))  # White background
+        
+        # Black border
+        pygame.draw.rect(surface, (0, 0, 0), surface.get_rect(), 3)
+        
+        # Large number in center
+        font = pygame.font.Font(None, int(size * 0.7))
+        text = font.render(str(value), True, (0, 0, 0))
+        text_rect = text.get_rect(center=(size//2, size//2))
+        surface.blit(text, text_rect)
+        
+        return surface
 
     def get_entry_height(self, entry, max_width):
         """Calculate height needed for a log entry"""

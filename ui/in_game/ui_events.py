@@ -13,6 +13,8 @@ from games.livedice_f.livedice_f_rules import GameStateEnum
 
 
 class UIEvents:
+    """Handles all UI event processing - integrating message_manager support"""
+    """Handles all UI event processing - integrating message_manager support"""
     """Handles all UI event processing"""
     
     def __init__(self, ui_instance):
@@ -135,22 +137,28 @@ class UIEvents:
                     self.ui.game_state.referee.perform_action("STASH")
                     return
         
-        # READY UP POPUP button
+        # READY UP POPUP button (ONLY current player can click)
         ready_up_rect = self.ui.sections["READY_UP_POPUP"]
         if ready_up_rect.collidepoint(pos) and self.ui.game_state.current_game_state == GameStateEnum.NEXTUP_READYUP:
-            self.ui.start_turn()
+            # CRITICAL: Only allow current player to click (human player)
+            if self.ui.game_state.current_player.user.username.startswith("@VIDEO-GAMER"):
+                self.ui.start_turn()
             return
         
-        # TURN BUST POPUP button
+        # TURN BUST POPUP button (ONLY current player can click)
         turn_bust_rect = self.ui.sections["TURN_BUST_POPUP"]
         if turn_bust_rect.collidepoint(pos) and self.ui.game_state.current_game_state == GameStateEnum.BUST_TURN_SUMMARY:
-            self.ui.game_state.referee.end_turn()
+            # CRITICAL: Only allow current player to click (human player)
+            if self.ui.game_state.current_player.user.username.startswith("@VIDEO-GAMER"):
+                self.ui.game_state.referee.end_turn()
             return
         
-        # BANKED POINTS POPUP button
+        # BANKED POINTS POPUP button (ONLY current player can click)
         banked_points_rect = self.ui.sections["BANKED_POINTS_POPUP"]
         if banked_points_rect.collidepoint(pos) and self.ui.game_state.current_game_state == GameStateEnum.BANKED_TURN_SUMMARY:
-            self.ui.game_state.referee.end_turn()
+            # CRITICAL: Only allow current player to click (human player)
+            if self.ui.game_state.current_player.user.username.startswith("@VIDEO-GAMER"):
+                self.ui.game_state.referee.end_turn()
             return
         
         # SCORING INFO button
@@ -259,23 +267,23 @@ class UIEvents:
         self.ui.update_bank_button()
 
     def handle_log_scroll(self, event):
-        """Handle log scrolling"""
+        """Handle log scrolling - works with both old game_log and new message_manager"""
         if event.button == 4:
             self.ui.log_scroll_y = max(0, self.ui.log_scroll_y - self.ui.log_line_height)
         elif event.button == 5:
+            # TEMPORARY: During transition, use both systems
             formatted_log = [self.ui.format_log_entry(entry) for entry in self.ui.game_state.game_log]
+            messages = self.ui.game_state.message_manager.get_all_messages()
+            # Calculate total height from both (messages will eventually replace formatted_log)
             total_height = sum(self.ui.get_entry_height(entry, self.ui.sections["GAME_DATA_LOG"].width - 20) for entry in formatted_log)
             max_scroll = max(0, total_height - self.ui.sections["GAME_DATA_LOG"].height)
             self.ui.log_scroll_y = min(max_scroll, self.ui.log_scroll_y + self.ui.log_line_height)
         self.ui.log_auto_scroll = False
 
     def scroll_log_to_bottom(self):
-        """Auto-scroll game log to bottom when new entries added"""
-        formatted_log = [self.ui.format_log_entry(entry) for entry in self.ui.game_state.game_log]
-        total_height = sum(self.ui.get_entry_height(entry, self.ui.sections["GAME_DATA_LOG"].width - 20) for entry in formatted_log)
-        visible_height = self.ui.sections["GAME_DATA_LOG"].height
-        max_scroll = max(0, total_height - visible_height)
-        self.ui.log_scroll_y = max_scroll
+        """Auto-scroll game log to bottom when new messages arrive"""
+        # Enable auto-scroll (will be applied in next draw)
+        self.ui.log_auto_scroll = True
 
     def handle_log_drag(self, mouse_pos):
         """Handle log dragging"""

@@ -2,6 +2,7 @@ from typing import List, Optional
 import re
 from core.account.user import User
 from core.game_engine.game_referee import GameReferee
+from core.messaging import MessageManager
 from core.game_state.real_time_score_counters import RealTimeScoreCounters
 from games.livedice_f.livedice_f_rules import LiveDiceFRules, GameStateEnum
 
@@ -60,7 +61,7 @@ class Player:
     def is_bot(self) -> bool:
         # FIXED: Check for new bot naming format with difficulty prefix
         # Supports: EASY-GO-BOT-1, NORMAL-GO-BOT-2, HARD-GO-BOT-3, etc.
-        return "GO-BOT" in self.user.username
+        return "GO-BOT" in self.user.username or self.user.username.startswith("@")
 
     def reset_turn(self):
         self.stashed_dice = []
@@ -89,6 +90,9 @@ class GameStateManager:
         self.game_log: List[str] = []
         self.active_task = ""
         
+        # Initialize messaging system
+        self.message_manager = MessageManager()
+        
         # Store game configuration (ensure endgoal is integer)
         self.endgoal = int(endgoal) if endgoal else 4000
         self.ruleset = ruleset if ruleset else "STANDARD"
@@ -110,7 +114,7 @@ class GameStateManager:
         # FIXED: Add AI players with difficulty prefix
         for i in range(ai_players):
             # Bot names now include difficulty: EASY-GO-BOT-1, NORMAL-GO-BOT-2, HARD-GO-BOT-3
-            username = f"{self.bot_difficulty.upper()}-GO-BOT-{i+1}"
+            username = f"@{self.bot_difficulty.upper()}-GO-BOT-{i+1}"
             self.add_player(User(username, f"gobot{i+1}@example.com", "password"))
 
         self.determine_starting_player()
@@ -164,12 +168,25 @@ class GameStateManager:
         return re.sub(pattern, replace, dice_str)
 
     def add_log_entry(self, entry: str, prefix: str = None):
+        """Legacy method - kept for backward compatibility. New code should use message_manager."""
         if prefix:
             formatted_entry = f"{prefix}: {entry}"
         else:
             formatted_entry = entry
         formatted_entry = self.format_dice_for_log(formatted_entry)
         self.game_log.append(formatted_entry)
+        
+        # ALSO add to message_manager for new system
+        if prefix and "GO-BOT" in prefix:
+            # Bot message
+            self.message_manager.add_bot_thinking(prefix, entry)
+        elif prefix == "@G-REF." or prefix == "@G-REF":
+            # G-REF message
+            self.message_manager.add_gref_official_statement(entry)
+        else:
+            # Generic message - add as G-REF
+            self.message_manager.add_gref_official_statement(formatted_entry)
+        
         if self.ui:
             self.ui.events.scroll_log_to_bottom()
 

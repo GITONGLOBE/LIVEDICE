@@ -2,6 +2,8 @@
 UI BOT MODULE
 Bot AI interaction for LIVEDICE game UI.
 Handles bot turn execution, decision display, and game flow for AI players.
+
+UPDATED: Full integration with message_manager personality system
 """
 
 import pygame
@@ -25,7 +27,15 @@ class UIBot:
         self.bot_turn_in_progress = False
     
     def bot_turn(self):
-        """Handle AI bot turn"""
+        """Handle AI bot turn - uses message_manager for personality-driven messages"""
+        # CRITICAL: Only proceed if current player is actually a bot
+        if not self.ui.game_state.current_player.is_bot():
+            return
+        
+        # CRITICAL: Double-check player is not human
+        if self.ui.game_state.current_player.user.username.startswith("@VIDEO-GAMER"):
+            return
+        
         pygame.event.pump()
 
         def bot_delay(duration_ms=1000):
@@ -41,8 +51,16 @@ class UIBot:
         go_bot_ai = BotAI(self.ui.game_state)
         
         bot_name = self.ui.game_state.current_player.user.username
+        turn_number = self.ui.game_state.current_player.turn_count + 1
+        
         print(f"{bot_name} TURN STARTED")
-        self.ui.game_state.add_log_entry(f"{bot_name} STARTS THEIR TURN", prefix=bot_name)
+        
+        # G-REF announces turn start
+        self.ui.game_state.message_manager.add_gref_turn_start(bot_name, turn_number)
+        
+        # Bot announces they're starting (personality-driven)
+        context = {"turn": turn_number}
+        self.ui.game_state.message_manager.add_bot_turn_start_message(bot_name, context)
 
         # Safety counter to prevent infinite loops
         max_decisions = 50
@@ -56,13 +74,28 @@ class UIBot:
             
             decision, thinking_msg = go_bot_ai.make_decision()
             
-            # Display bot's thinking process
+            # Create context for this decision
+            context = {
+                "turn": turn_number,
+                "score": self.ui.game_state.referee.calculate_turn_score(),
+                "remaining_dice": len(self.ui.game_state.dice_values),
+                "decision_count": decision_count
+            }
+            
+            # Display bot's thinking process (uses personality system)
             if thinking_msg:
                 self.ui.display_bot_thinking(thinking_msg)
                 bot_delay()
             
             print(f"{bot_name} decision: {decision}")
-            self.ui.game_state.add_log_entry(f"{bot_name} DECIDES TO: {decision.upper()}", prefix=bot_name)
+            
+            # Bot explains their decision (personality-driven)
+            self.ui.game_state.message_manager.add_bot_strategy_explanation(
+                bot_name, 
+                decision, 
+                f"DECIDING TO {decision.upper()}", 
+                context
+            )
             bot_delay()
 
             if decision == "START_TURN":
@@ -72,11 +105,15 @@ class UIBot:
 
             if decision == "ROLL":
                 if self.ui.game_state.referee.can_roll():
-                    self.ui.display_bot_thinking("TIME TO ROLL THE DICE!")
+                    # Bot announces roll (personality-driven)
+                    self.ui.game_state.message_manager.add_bot_reaction(bot_name, "rolling", context)
                     bot_delay()
                     
                     # Roll the dice
                     dice_values = self.ui.game_state.roll_dice()
+                    
+                    # G-REF announces roll result
+                    self.ui.game_state.message_manager.add_gref_roll_result(bot_name, dice_values)
                     
                     # Generate new random positions
                     self.ui.game_board.generate_dice_positions(len(dice_values))
@@ -103,15 +140,58 @@ class UIBot:
                     
                     bot_delay()
                     
+                    # Check for bust
                     if self.ui.game_state.referee.is_bust():
-                        self.ui.display_bot_thinking("OH NO! I ROLLED A BUST!")
+                        lost_points = self.ui.game_state.referee.calculate_turn_score()
+                        
+                        # Bot reacts to bust (personality-driven)
+                        bust_context = {
+                            "turn": turn_number,
+                            "lost_points": lost_points,
+                            "dice": dice_values
+                        }
+                        self.ui.game_state.message_manager.add_bot_reaction(bot_name, "bust", bust_context)
                         bot_delay()
+                        
+                        # G-REF announces bust
+                        self.ui.game_state.message_manager.add_gref_bust(bot_name, lost_points)
+                        
                         self.ui.game_state.referee.bust()
+                        
+                        # BOT AUTO-CLICKS BUST POPUP (FIX #6)
+                        bot_delay(800)  # Brief pause to show popup
+                        # Auto-advance past bust summary (no need to wait for click)
                         break
+                    else:
+                        # Bot reacts to successful roll (personality-driven)
+                        # Simple points estimation (1s and 5s are worth points)
+                        points_estimate = dice_values.count(1) * 100 + dice_values.count(5) * 50
+                        
+                        roll_context = {
+                            "turn": turn_number,
+                            "points": points_estimate,
+                            "dice": dice_values
+                        }
+                        
+                        # Determine if it's a good or bad roll
+                        if points_estimate >= 200:
+                            self.ui.game_state.message_manager.add_bot_reaction(bot_name, "good_roll", roll_context)
+                        else:
+                            self.ui.game_state.message_manager.add_bot_reaction(bot_name, "bad_roll", roll_context)
                 else:
                     print(f"{bot_name} CAN'T ROLL WITHOUT STASHING FIRST")
-                    self.ui.game_state.add_log_entry(f"{bot_name} CAN'T ROLL WITHOUT STASHING FIRST", prefix=bot_name)
-                    self.ui.display_bot_decision("CAN'T ROLL WITHOUT STASHING. CONSIDERING OTHER OPTIONS.")
+                    
+                    # G-REF announces the issue
+                    self.ui.game_state.message_manager.add_gref_official_statement(
+                        f"{bot_name} MUST STASH DICE BEFORE ROLLING AGAIN"
+                    )
+                    
+                    # Bot reacts (personality-driven)
+                    self.ui.game_state.message_manager.add_bot_thinking(
+                        bot_name, 
+                        "CAN'T ROLL WITHOUT STASHING FIRST", 
+                        context
+                    )
                     bot_delay()
                     continue
           
@@ -120,45 +200,125 @@ class UIBot:
                 stash_indices = go_bot_ai.get_stash_indices()
                 if stash_indices:
                     stashed_values = [self.ui.game_state.dice_values[i] for i in stash_indices]
-                    formatted_stashed = self.ui.game_state.format_dice(stashed_values)
-
+                    
+                    # Simple points estimation for stashed dice
+                    stash_points = stashed_values.count(1) * 100 + stashed_values.count(5) * 50
+                    
+                    # Perform the stash
                     self.ui.game_state.stash_dice(stash_indices)
-                    self.ui.game_state.add_log_entry(f"{bot_name} STASHED DICE: {formatted_stashed}", prefix=bot_name)
+                    
+                    # G-REF announces stash
+                    self.ui.game_state.message_manager.add_gref_stash_action(
+                        bot_name, 
+                        stash_points if stash_points > 0 else 100,  # Default to 100 if 0
+                        len(stashed_values)
+                    )
+                    
+                    # Bot explains stash decision (personality-driven)
+                    stash_context = {
+                        "turn": turn_number,
+                        "points": stash_points if stash_points > 0 else 100,
+                        "dice_count": len(stashed_values),
+                        "dice": stashed_values
+                    }
+                    self.ui.game_state.message_manager.add_bot_strategy_explanation(
+                        bot_name,
+                        "STASH",
+                        f"STASHING {len(stashed_values)} DICE",
+                        stash_context
+                    )
                     bot_delay()
                 else:
                     print(f"{bot_name} TRIED TO STASH, BUT NO STASHABLE DICE AVAILABLE")
-                    self.ui.game_state.add_log_entry(f"{bot_name} TRIED TO STASH, BUT NO STASHABLE DICE AVAILABLE", prefix=bot_name)
-                    self.ui.display_bot_decision("NO STASHABLE DICE AVAILABLE. ENDING TURN.")
+                    
+                    # G-REF announces the issue
+                    self.ui.game_state.message_manager.add_gref_official_statement(
+                        f"{bot_name} HAS NO STASHABLE DICE AVAILABLE"
+                    )
+                    
+                    # Bot reacts (personality-driven)
+                    self.ui.game_state.message_manager.add_bot_frustration(bot_name, context)
                     bot_delay()
                     break
             
             elif decision == "BANK":
                 if self.ui.game_state.referee.can_bank():
                     points = self.ui.game_state.referee.calculate_turn_score()
-                    self.ui.game_state.referee.bank_points()
-                    # Removed: bank_points() already records turn
-                    self.ui.game_state.add_log_entry(f"{bot_name} BANKED {points} POINTS", prefix=bot_name)
+                    
+                    # Bot explains bank decision (personality-driven)
+                    bank_context = {
+                        "turn": turn_number,
+                        "points": points,
+                        "action": "BANK"
+                    }
+                    self.ui.game_state.message_manager.add_bot_reaction(bot_name, "banking", bank_context)
                     bot_delay()
+                    
+                    # Perform the bank
+                    self.ui.game_state.referee.bank_points()
+                    
+                    # G-REF announces bank
+                    self.ui.game_state.message_manager.add_gref_bank_action(bot_name, points)
+                    
+                    # BOT AUTO-CLICKS BANK POPUP (FIX #6)
+                    bot_delay(800)  # Brief pause to show popup
+                    # Auto-advance past bank summary (no need to wait for click)
                     break
                 else:
-                    self.ui.game_state.add_log_entry(f"{bot_name} COULDN'T BANK, CONTINUING TURN", prefix=bot_name)
+                    # G-REF announces can't bank
+                    self.ui.game_state.message_manager.add_gref_official_statement(
+                        f"{bot_name} CANNOT BANK YET"
+                    )
+                    
+                    # Bot reacts (personality-driven)
+                    self.ui.game_state.message_manager.add_bot_thinking(
+                        bot_name,
+                        "CAN'T BANK YET, CONTINUING TURN",
+                        context
+                    )
                     continue
             
             elif decision == "START_NEW_STASH":
-                self.ui.display_bot_thinking("MY STASH IS FULL. LET'S START A NEW ONE!")
+                # Bot announces stashstash (personality-driven)
+                self.ui.game_state.message_manager.add_bot_thinking(
+                    bot_name,
+                    "MY STASH IS FULL - TIME TO START A NEW ONE!",
+                    context
+                )
                 bot_delay()
+                
                 self.ui.game_state.start_new_stash()
-                self.ui.game_state.add_log_entry(f"{bot_name} STARTED A NEW STASH", prefix=bot_name)
+                
+                # G-REF announces stashstash
+                self.ui.game_state.message_manager.add_gref_official_statement(
+                    f"{bot_name} STARTED A NEW STASH (STASHSTASH)"
+                )
                 bot_delay()
             
             elif decision == "END_TURN":
-                self.ui.display_bot_thinking("I CAN'T DO ANYTHING ELSE. ENDING MY TURN.")
+                # Bot announces end (personality-driven)
+                self.ui.game_state.message_manager.add_bot_thinking(
+                    bot_name,
+                    "NO MORE MOVES AVAILABLE - ENDING MY TURN",
+                    context
+                )
                 bot_delay()
                 break
             
             else:
                 print(f"UNKNOWN DECISION: {decision}")
-                self.ui.game_state.add_log_entry(f"{bot_name} MADE AN UNKNOWN DECISION: {decision.upper()}", prefix=bot_name)
+                
+                # G-REF announces unknown decision
+                self.ui.game_state.message_manager.add_gref_official_statement(
+                    f"{bot_name} MADE AN UNKNOWN DECISION: {decision.upper()}"
+                )
+                
+                # Bot reacts (personality-driven)
+                self.ui.game_state.message_manager.add_bot_thinking(
+                    bot_name,
+                    f"UNKNOWN DECISION: {decision.upper()}",
+                    context
+                )
                 bot_delay()
                 break
 
@@ -167,19 +327,22 @@ class UIBot:
 
         if decision_count >= max_decisions:
             print(f"WARNING: Bot turn ended due to max decision limit!")
-            self.ui.game_state.add_log_entry(f"{bot_name} TURN ENDED (MAX DECISIONS REACHED)", prefix="SYSTEM")
+            
+            # G-REF announces max decisions reached
+            self.ui.game_state.message_manager.add_gref_official_statement(
+                f"{bot_name} TURN ENDED (MAX DECISIONS REACHED)"
+            )
 
         print(f"{bot_name} TURN ENDED")
-        self.ui.game_state.add_log_entry(f"{bot_name} ENDED THEIR TURN", prefix=bot_name)
+        
+        # G-REF announces turn end
+        self.ui.game_state.message_manager.add_gref_turn_end(bot_name)
 
         # Set flag to False BEFORE blocking operations
         self.bot_turn_in_progress = False
 
-        # Show end message and wait for click
-        self.ui.display_bot_decision(f"{bot_name} TURN ENDED. CLICK TO CONTINUE.")
-        self.ui.draw()
-        pygame.display.flip()
-        self.ui.wait_for_click()
+        # Bot turn complete - auto-advance (FIX #6)
+        bot_delay(500)  # Brief pause before next player
 
         # Call referee.end_turn() which handles next_player() and game state properly
         self.ui.game_state.referee.end_turn()
@@ -188,7 +351,11 @@ class UIBot:
         """Handle end of game"""
         winner = self.ui.game_state.get_winner()
         if winner:
-            self.ui.game_state.add_log_entry(f"GAME OVER! {winner.user.username} WINS WITH {winner.get_total_score()} POINTS!")
+            # G-REF announces game end
+            self.ui.game_state.message_manager.add_gref_game_end(
+                winner.user.username, 
+                winner.get_total_score()
+            )
         self.ui.game_state.set_active_task("GAME OVER")
     
     def change_snaptray_color(self, color):
@@ -203,16 +370,22 @@ class UIBot:
         pygame.display.flip()
         
     def display_bot_thinking(self, thought):
-        """Display bot thinking message"""
+        """Display bot thinking message using personality system"""
         bot_name = self.ui.game_state.current_player.user.username
-        self.ui.bot_thinking_message = f"{bot_name} IS THINKING: {thought.upper()}"
-        self.ui.game_state.add_log_entry(f"{bot_name} IS THINKING: {thought.upper()}", prefix=bot_name)
+        context = {
+            "turn": self.ui.game_state.current_player.turn_count + 1,
+            "score": self.ui.game_state.referee.calculate_turn_score()
+        }
+        self.ui.game_state.message_manager.add_bot_thinking(bot_name, thought.upper(), context)
 
     def display_bot_decision(self, decision):
-        """Display bot decision message"""
+        """Display bot decision message using personality system"""
         bot_name = self.ui.game_state.current_player.user.username
-        self.ui.bot_decision_message = f"{bot_name} DECISION: {decision.upper()}"
-        self.ui.game_state.add_log_entry(decision.upper(), prefix=bot_name)
+        context = {
+            "turn": self.ui.game_state.current_player.turn_count + 1,
+            "score": self.ui.game_state.referee.calculate_turn_score()
+        }
+        self.ui.game_state.message_manager.add_bot_strategy_explanation(bot_name, "DECISION", decision.upper(), context)
 
     def wait_for_click(self):
         """Wait for user to click"""
@@ -229,10 +402,17 @@ class UIBot:
     def show_scoring_info(self):
         """Show scoring information in log"""
         current_player = self.ui.game_state.current_player
-        self.ui.game_state.add_log_entry(f"{current_player.user.username} REQUESTED A REMINDER", prefix="@G-REF.")
+        
+        # G-REF announces scoring reminder request
+        self.ui.game_state.message_manager.add_gref_official_statement(
+            f"{current_player.user.username} REQUESTED SCORING INFORMATION"
+        )
         
         rules = self.ui.game_state.referee.rules
         scoring_info = rules.get_scoring_combinations()
         
         for combo_name, combo_info in scoring_info.items():
-            self.ui.game_state.add_log_entry(f"{combo_name}: {combo_info['points']} POINTS", prefix="@G-REF.")
+            # G-REF announces each scoring rule
+            self.ui.game_state.message_manager.add_gref_official_statement(
+                f"{combo_name}: {combo_info['points']} POINTS"
+            )
