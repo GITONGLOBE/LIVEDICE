@@ -184,6 +184,12 @@ class UIEvents:
 
     def start_turn(self):
         """Start a player's turn"""
+        # G-REF announces turn start for ALL players
+        player_name = self.ui.game_state.current_player.user.username
+        turn_number = self.ui.game_state.current_player.turn_count + 1
+        self.ui.game_state.message_manager.add_gref_turn_start(player_name, turn_number)
+        
+        # Roll dice
         self.ui.game_state.roll_dice()
         self.ui.animate_dice_roll()
         self.ui.draw()
@@ -267,16 +273,26 @@ class UIEvents:
         self.ui.update_bank_button()
 
     def handle_log_scroll(self, event):
-        """Handle log scrolling - works with both old game_log and new message_manager"""
+        """Handle log scrolling - FIXED to use message_manager consistently"""
         if event.button == 4:
             self.ui.log_scroll_y = max(0, self.ui.log_scroll_y - self.ui.log_line_height)
         elif event.button == 5:
-            # TEMPORARY: During transition, use both systems
-            formatted_log = [self.ui.format_log_entry(entry) for entry in self.ui.game_state.game_log]
+            # Use message_manager for consistent scrolling
             messages = self.ui.game_state.message_manager.get_all_messages()
-            # Calculate total height from both (messages will eventually replace formatted_log)
-            total_height = sum(self.ui.get_entry_height(entry, self.ui.sections["GAME_DATA_LOG"].width - 20) for entry in formatted_log)
-            max_scroll = max(0, total_height - self.ui.sections["GAME_DATA_LOG"].height)
+            rect = self.ui.sections["GAME_DATA_LOG"]
+            max_width = rect.width - 40
+            
+            # Calculate total height
+            message_heights = []
+            for message in messages:
+                try:
+                    _, _, height, _ = self.ui.drawing.render_message(message, max_width)
+                    message_heights.append(height + 10)
+                except:
+                    message_heights.append(50)
+            
+            total_height = sum(message_heights)
+            max_scroll = max(0, total_height - rect.height)
             self.ui.log_scroll_y = min(max_scroll, self.ui.log_scroll_y + self.ui.log_line_height)
         self.ui.log_auto_scroll = False
 
@@ -286,16 +302,30 @@ class UIEvents:
         self.ui.log_auto_scroll = True
 
     def handle_log_drag(self, mouse_pos):
-        """Handle log dragging"""
+        """Handle log dragging - FIXED to use message_manager"""
         if self.ui.log_dragging:
             rect = self.ui.sections["GAME_DATA_LOG"]
             visible_height = rect.height
-            formatted_log = [self.ui.format_log_entry(entry) for entry in self.ui.game_state.game_log]
-            total_height = sum(self.ui.get_entry_height(entry, rect.width - 20) for entry in formatted_log)
+            
+            # FIXED: Use message_manager instead of game_log
+            messages = self.ui.game_state.message_manager.get_all_messages()
+            max_width = rect.width - 40  # 20px padding on each side
+            
+            # Calculate total height from messages
+            message_heights = []
+            for message in messages:
+                try:
+                    _, _, height, _ = self.ui.drawing.render_message(message, max_width)
+                    message_heights.append(height + 10)  # 10px spacing
+                except:
+                    message_heights.append(50)  # Fallback height
+            
+            total_height = sum(message_heights)
             max_scroll = max(0, total_height - visible_height)
             
+            # Calculate scroll position from mouse position
             drag_pos = mouse_pos[1] - rect.top
-            scroll_ratio = drag_pos / rect.height
+            scroll_ratio = max(0, min(1, drag_pos / rect.height))  # Clamp to 0-1
             self.ui.log_scroll_y = int(scroll_ratio * max_scroll)
             self.ui.log_scroll_y = min(max_scroll, max(0, self.ui.log_scroll_y))
 

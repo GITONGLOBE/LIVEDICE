@@ -109,11 +109,11 @@ class UIBot:
                     self.ui.game_state.message_manager.add_bot_reaction(bot_name, "rolling", context)
                     bot_delay()
                     
-                    # Roll the dice
+                    # Roll the dice (G-REF message now generated inside roll_dice)
                     dice_values = self.ui.game_state.roll_dice()
                     
-                    # G-REF announces roll result
-                    self.ui.game_state.message_manager.add_gref_roll_result(bot_name, dice_values)
+                    # Get stashable dice indices for proper color coding
+                    stashable_indices = self.ui.game_state.current_stashable_dice
                     
                     # Generate new random positions
                     self.ui.game_board.generate_dice_positions(len(dice_values))
@@ -153,8 +153,8 @@ class UIBot:
                         self.ui.game_state.message_manager.add_bot_reaction(bot_name, "bust", bust_context)
                         bot_delay()
                         
-                        # G-REF announces bust
-                        self.ui.game_state.message_manager.add_gref_bust(bot_name, lost_points)
+                        # REMOVED: Duplicate G-REF bust message
+                        # G-REF message is now generated inside game_referee.bust() for ALL players
                         
                         self.ui.game_state.referee.bust()
                         
@@ -201,23 +201,19 @@ class UIBot:
                 if stash_indices:
                     stashed_values = [self.ui.game_state.dice_values[i] for i in stash_indices]
                     
-                    # Simple points estimation for stashed dice
-                    stash_points = stashed_values.count(1) * 100 + stashed_values.count(5) * 50
-                    
-                    # Perform the stash
+                    # Perform the stash (G-REF message now generated inside stash_dice with correct points)
                     self.ui.game_state.stash_dice(stash_indices)
                     
-                    # G-REF announces stash
-                    self.ui.game_state.message_manager.add_gref_stash_action(
-                        bot_name, 
-                        stash_points if stash_points > 0 else 100,  # Default to 100 if 0
-                        len(stashed_values)
-                    )
-                    
                     # Bot explains stash decision (personality-driven)
+                    # Calculate correct points for bot's reaction
+                    stash_points = sum([
+                        score for name, score in 
+                        self.ui.game_state.referee.get_scoring_combinations(stashed_values)
+                    ])
+                    
                     stash_context = {
                         "turn": turn_number,
-                        "points": stash_points if stash_points > 0 else 100,
+                        "points": stash_points,
                         "dice_count": len(stashed_values),
                         "dice": stashed_values
                     }
@@ -254,11 +250,8 @@ class UIBot:
                     self.ui.game_state.message_manager.add_bot_reaction(bot_name, "banking", bank_context)
                     bot_delay()
                     
-                    # Perform the bank
+                    # Perform the bank (G-REF message now generated inside bank_points)
                     self.ui.game_state.referee.bank_points()
-                    
-                    # G-REF announces bank
-                    self.ui.game_state.message_manager.add_gref_bank_action(bot_name, points)
                     
                     # BOT AUTO-CLICKS BANK POPUP (FIX #6)
                     bot_delay(800)  # Brief pause to show popup
@@ -335,8 +328,8 @@ class UIBot:
 
         print(f"{bot_name} TURN ENDED")
         
-        # G-REF announces turn end
-        self.ui.game_state.message_manager.add_gref_turn_end(bot_name)
+        # REMOVED: Duplicate G-REF turn_end message
+        # G-REF message is now generated inside game_referee.end_turn() for ALL players
 
         # Set flag to False BEFORE blocking operations
         self.bot_turn_in_progress = False

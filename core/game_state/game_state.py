@@ -231,8 +231,13 @@ class GameStateManager:
         self.current_stashable_combinations = self.referee.get_scoring_combinations(self.dice_values)
         self.current_stashable_dice = self.referee.get_stashable_dice(self.dice_values)
         
-        formatted_dice = self.format_dice_for_log(' '.join([f'[{v}{"g" if i in self.current_stashable_dice else "w"}]' for i, v in enumerate(self.dice_values)]))
-        self.add_log_entry(f"{self.current_player.user.username} ROLLED: {formatted_dice}")
+        # CRITICAL: G-REF announces roll for ALL players (human and bot)
+        player_name = self.current_player.user.username
+        self.message_manager.add_gref_roll_result(
+            player_name=player_name,
+            dice_values=self.dice_values,
+            stashable_indices=self.current_stashable_dice
+        )
         
         if self.current_stashable_dice:
             self.referee.set_game_state(GameStateEnum.ROLLRESULT_POSITIVE_STASHOPTIONS)
@@ -272,6 +277,9 @@ class GameStateManager:
 
         stashed_values = [self.dice_values[i] for i in dice_indices]
         
+        # CRITICAL: Store original stashed dice for message BEFORE deletion
+        original_stashed_dice = stashed_values.copy()
+        
         dice_indices.sort(reverse=True)
         
         total_stash_score = 0
@@ -295,9 +303,14 @@ class GameStateManager:
 
         self.selected_dice = []
         
-        stash_log = " ".join([f"{name} for {score} POINTS" for name, score in stashed_combinations])
-        formatted_stashed = self.format_dice_for_log(' '.join([f'[{v}g]' for v in stashed_values]))
-        self.add_log_entry(f"{self.current_player.user.username} STASHED: {formatted_stashed}. {stash_log}. TOTAL: {total_stash_score} POINTS")
+        # CRITICAL: G-REF announces stash for ALL players (human and bot)
+        player_name = self.current_player.user.username
+        self.message_manager.add_gref_stash_action(
+            player_name=player_name,
+            points=total_stash_score,
+            dice_count=len(original_stashed_dice),
+            stashed_dice=original_stashed_dice
+        )
         
         self.current_player.stashed_dice_this_roll = True
         self.real_time_counters.update_counters(self)

@@ -225,6 +225,10 @@ class GameReferee:
         self.set_game_state(GameStateEnum.START_TURN)
 
     def end_turn(self):
+        # G-REF announces turn end for ALL players
+        player_name = self.game_state_manager.current_player.user.username
+        self.game_state_manager.message_manager.add_gref_turn_end(player_name)
+        
         self.game_state_manager.next_player()
         self.set_game_state(GameStateEnum.NEXTUP_READYUP)
 
@@ -246,6 +250,15 @@ class GameReferee:
             self.game_state_manager.current_player.turn_count + 1, 0, 
             self.game_state_manager.current_player.roll_count, 0
         )
+        
+        # CRITICAL: G-REF announces bust for ALL players (human and bot)
+        player_name = self.game_state_manager.current_player.user.username
+        lost_points = self.game_state_manager.busted_lost_score
+        self.game_state_manager.message_manager.add_gref_bust(
+            player_name=player_name,
+            lost_points=lost_points
+        )
+        
         self.set_game_state(GameStateEnum.BUST_TURN_SUMMARY)
 
     def bank_points(self):
@@ -256,5 +269,13 @@ class GameReferee:
             current_player.roll_count, current_player.full_stashes_moved_this_turn
         )
         self.game_state_manager.turn_banked = True
+        
+        # CRITICAL: G-REF announces bank for ALL players (human and bot)
+        player_name = current_player.user.username
+        self.game_state_manager.message_manager.add_gref_bank_action(
+            player_name=player_name,
+            points=total_score
+        )
+        
         self.set_game_state(GameStateEnum.BANKED_TURN_SUMMARY)
         current_player.stash_stash = 0

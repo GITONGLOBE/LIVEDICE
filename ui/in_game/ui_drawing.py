@@ -40,6 +40,10 @@ class UIDrawing:
             ui_instance: Reference to InGameUI instance for accessing game state and resources
         """
         self.ui = ui_instance
+        
+        # PERFORMANCE: Message rendering cache
+        self.message_cache = {}  # {message_id: (surface, width, height, is_left)}
+        self.last_message_count = 0
     
     def draw_text_with_font(self, text: str, x: int, y: int, color: Tuple[int, int, int], font):
         """Helper function to draw text with a specific font"""
@@ -1110,16 +1114,29 @@ class UIDrawing:
         # Get messages from message_manager
         messages = self.ui.game_state.message_manager.get_recent_messages(MAX_LOG_ENTRIES)
         
-        # Calculate heights and render messages
+        # PERFORMANCE: Clear cache if messages changed
+        if len(messages) != self.last_message_count:
+            self.message_cache.clear()
+            self.last_message_count = len(messages)
+        
+        # Calculate heights and render messages (with caching)
         max_width = rect.width - 40  # 20px padding on each side
         message_surfaces = []
         message_heights = []
         
-        for message in messages:
-            # Get rendered message surface
-            msg_surface, width, height, is_left_aligned = self.render_message(message, max_width)
-            message_surfaces.append((msg_surface, is_left_aligned))
-            message_heights.append(height + 10)  # 10px spacing between messages
+        for i, message in enumerate(messages):
+            # Check cache first
+            cache_key = f"{i}_{message.timestamp}"
+            if cache_key in self.message_cache:
+                cached = self.message_cache[cache_key]
+                message_surfaces.append((cached[0], cached[3]))
+                message_heights.append(cached[2] + 10)
+            else:
+                # Render and cache
+                msg_surface, width, height, is_left_aligned = self.render_message(message, max_width)
+                self.message_cache[cache_key] = (msg_surface, width, height, is_left_aligned)
+                message_surfaces.append((msg_surface, is_left_aligned))
+                message_heights.append(height + 10)  # 10px spacing between messages
 
         total_height = sum(message_heights)
         visible_height = rect.height
@@ -1143,11 +1160,11 @@ class UIDrawing:
             # Adjust for scroll
             adjusted_y = y + max_scroll - self.ui.log_scroll_y
             
-            # Only render if visible
+            # Only render if visible (PERFORMANCE: skip off-screen messages)
             if adjusted_y + height > 0 and adjusted_y < visible_height:
                 # Position based on alignment
                 if is_left_aligned:
-                    x = 20  # Left padding
+                    x = 10  # Left padding (FIXED: moved 10px left from 20)
                 else:
                     x = rect.width - msg_surface.get_width() - 20  # Right aligned with padding
                 
@@ -1156,7 +1173,7 @@ class UIDrawing:
         # Draw scrollbar if needed
         if total_height > visible_height:
             scrollbar_height = max(20, (visible_height / total_height) * visible_height)
-            scrollbar_pos = (self.ui.log_scroll_y / max_scroll) * (visible_height - scrollbar_height)
+            scrollbar_pos = (self.ui.log_scroll_y / max_scroll) * (visible_height - scrollbar_height) if max_scroll > 0 else 0
             pygame.draw.rect(log_surface, self.ui.WHITE, (rect.width - 10, scrollbar_pos, 10, scrollbar_height))
 
         self.ui.screen.blit(log_surface, rect)
@@ -1195,7 +1212,7 @@ class UIDrawing:
         if is_ref:
             # REF specification
             BG_COLOR = (255, 0, 0)  # #FF0000
-            NAME_COLOR_GREF = (0, 0, 255)  # #0000FF for @G-REF
+            NAME_COLOR_GREF = (255, 0, 0)  # #FF0000 for @G-REF (FIXED: changed from blue)
             NAME_COLOR_TEXT = (255, 255, 255)  # #FFFFFF for rest
             TEXT_COLOR = (255, 255, 255)  # #FFFFFF
             HIGHLIGHT_COLOR = (0, 255, 0)  # #00FF00
@@ -1222,11 +1239,19 @@ class UIDrawing:
             
             text_align = 'right'
         
-        # Fonts
-        name_font = pygame.font.Font(None, 18)
-        text_font = pygame.font.Font(None, 24)  # LARGER for message
-        text_font_bold = pygame.font.Font(None, 24)
-        text_font_bold.set_bold(True)  # For player names & points
+        # Fonts (FIXED: using open-sauce-two font with correct sizes)
+        # Name bar: 16px BLACK (same as left panel top bars - textbar_black)
+        # Message text: 18px regular (between name bar and old 24px)
+        try:
+            name_font = self.ui.fonts.get('black', {}).get(16, pygame.font.Font(None, 16))
+            text_font = self.ui.fonts.get('regular', {}).get(18, pygame.font.Font(None, 18))
+            text_font_bold = self.ui.fonts.get('black', {}).get(18, pygame.font.Font(None, 18))  # BLACK for highlights
+        except:
+            # Fallback to system font if open-sauce-two not available
+            name_font = pygame.font.Font(None, 16)
+            text_font = pygame.font.Font(None, 18)
+            text_font_bold = pygame.font.Font(None, 18)
+            text_font_bold.set_bold(True)
         
         # CRITICAL: Convert to ALL CAPS
         message_content = message.content.upper()
@@ -1240,16 +1265,21 @@ class UIDrawing:
             text_parts, text_font, text_font_bold, text_width, DICE_SIZE, DICE_SPACING
         )
         
-        # Calculate dimensions
+        # Calculate dimensions - FIXED: properly calculate height for each line
         line_height = text_font.get_height()
-        text_height = len(text_lines) * line_height
         
-        # Check for dice to add extra space
-        has_dice = any(part[0] == 'dice' for line in text_lines for part in line)
-        if has_dice:
-            text_height = max(text_height, DICE_SIZE + line_height)
+        # CRITICAL FIX: Calculate actual height needed for each line (dice are 36px tall)
+        total_text_height = 0
+        for line_parts in text_lines:
+            has_dice_in_line = any(part[0] == 'dice' for part in line_parts)
+            if has_dice_in_line:
+                # Line with dice needs dice height (36px) plus some spacing
+                total_text_height += max(DICE_SIZE, line_height) + 2
+            else:
+                # Regular text line
+                total_text_height += line_height
         
-        text_block_height = text_height + TEXT_PAD_TOP + TEXT_PAD_BOTTOM
+        text_block_height = total_text_height + TEXT_PAD_TOP + TEXT_PAD_BOTTOM
         text_block_height = max(MIN_TEXT_BLOCK_HEIGHT, text_block_height)
         
         # Calculate width
@@ -1294,7 +1324,7 @@ class UIDrawing:
             pygame.draw.rect(surface, BG_COLOR, text_rect)
             
             # 3. ARROW (right-angled triangle pointing LEFT)
-            arrow_y = text_block_y
+            arrow_y = text_block_y + 10  # FIXED: moved 10px down
             arrow_pts = [
                 (0, arrow_y),
                 (ARROW_WIDTH, arrow_y),
@@ -1327,12 +1357,12 @@ class UIDrawing:
             text_rect = pygame.Rect(0, text_block_y, text_block_width, text_block_height)
             pygame.draw.rect(surface, BG_COLOR, text_rect)
             
-            # 3. ARROW (right-angled triangle pointing RIGHT)
-            arrow_y = text_block_y
+            # 3. ARROW (right-angled triangle pointing RIGHT - properly mirrored from G-REF)
+            arrow_y = text_block_y + 10  # FIXED: moved 10px down
             arrow_pts = [
-                (text_block_width, arrow_y),
-                (text_block_width + ARROW_WIDTH, arrow_y),
-                (text_block_width + ARROW_WIDTH, arrow_y + ARROW_HEIGHT)
+                (text_block_width, arrow_y),                    # top-left
+                (text_block_width + ARROW_WIDTH, arrow_y),      # top-right
+                (text_block_width, arrow_y + ARROW_HEIGHT)      # bottom-left (pointy end!)
             ]
             pygame.draw.polygon(surface, BG_COLOR, arrow_pts)
             
@@ -1378,6 +1408,14 @@ class UIDrawing:
                 i += len(match.group(0))
                 continue
             
+            # Check for game action words (green + BLACK font)
+            # Words: ROLLED, ROLLING, ROLLS, STASHED, STASHES, STASHING, BUST, BUSTED
+            match = re.match(r'(ROLLED|ROLLING|ROLLS|STASHED|STASHES|STASHING|BUSTED|BUST)', text[i:])
+            if match:
+                parts.append(('action', match.group(0)))
+                i += len(match.group(0))
+                continue
+            
             # Regular text
             if not parts or parts[-1][0] != 'text':
                 parts.append(('text', text[i]))
@@ -1403,7 +1441,8 @@ class UIDrawing:
                 current_line.append((part_type, part_value))
                 current_width += dice_width
             else:
-                font = bold_font if part_type in ['player', 'points'] else reg_font
+                # Use BLACK font for player names, points, and action words
+                font = bold_font if part_type in ['player', 'points', 'action'] else reg_font
                 words = part_value.split(' ')
                 for word in words:
                     if not word:
@@ -1429,18 +1468,22 @@ class UIDrawing:
     def _render_textballoon_lines(self, surface, lines, reg_font, bold_font,
                                    start_x, start_y, text_color, highlight_color,
                                    align, max_width, dice_size, dice_spacing):
-        """Render text lines with dice images"""
+        """Render text lines with dice images - FIXED: proper spacing for dice lines"""
         y = start_y
-        line_height = reg_font.get_height()
+        base_line_height = reg_font.get_height()
         
         for line_parts in lines:
+            # CRITICAL FIX: Check if this line has dice for proper height
+            has_dice_in_line = any(part[0] == 'dice' for part in line_parts)
+            line_height = max(dice_size, base_line_height) + 2 if has_dice_in_line else base_line_height
+            
             # Calculate line width
             line_width = 0
             for part_type, part_value in line_parts:
                 if part_type == 'dice':
                     line_width += dice_size + dice_spacing
                 else:
-                    font = bold_font if part_type in ['player', 'points'] else reg_font
+                    font = bold_font if part_type in ['player', 'points', 'action'] else reg_font
                     line_width += font.size(part_value)[0]
             
             # Starting x based on alignment
@@ -1451,7 +1494,7 @@ class UIDrawing:
                 if part_type == 'dice':
                     # CRITICAL: Render as IMAGE
                     try:
-                        dice_key = part_value  # e.g., "white_2"
+                        dice_key = part_value.lower()  # FIXED: lowercase for lookup (e.g., "white_2")
                         dice_surf = self.ui.dice_renderer.dice_surfaces['textballoon'][dice_key]
                         dice_y = y + (line_height - dice_size) // 2
                         surface.blit(dice_surf, (x, dice_y))
@@ -1460,10 +1503,14 @@ class UIDrawing:
                         print(f"Error rendering dice {part_value}: {e}")
                         x += dice_size + dice_spacing
                 else:
-                    font = bold_font if part_type in ['player', 'points'] else reg_font
-                    color = highlight_color if part_type in ['player', 'points'] else text_color
+                    # Use BLACK font for player names, points, and action words
+                    # Use GREEN color (#00FF00) for player names, points, and action words
+                    font = bold_font if part_type in ['player', 'points', 'action'] else reg_font
+                    color = highlight_color if part_type in ['player', 'points', 'action'] else text_color
                     text_surf = font.render(part_value, True, color)
-                    surface.blit(text_surf, (x, y))
+                    # Center text vertically in the line
+                    text_y = y + (line_height - text_surf.get_height()) // 2
+                    surface.blit(text_surf, (x, text_y))
                     x += text_surf.get_width()
             
             y += line_height

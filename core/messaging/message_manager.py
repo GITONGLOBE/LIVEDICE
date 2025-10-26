@@ -24,6 +24,10 @@ class MessageManager:
         self.messages: List[Message] = []
         self.bot_personalities = {}  # Cache personalities by bot name
     
+    def _format_number(self, number: int) -> str:
+        """Format number with O instead of 0 (e.g., 100 -> 1OO)"""
+        return str(number).replace('0', 'O')
+    
     def add_message(self, message: Message):
         """Add a message to the log"""
         self.messages.append(message)
@@ -64,25 +68,45 @@ class MessageManager:
         self.add_message(message)
         return message
     
-    def add_gref_roll_result(self, player_name: str, dice_values: List[int]):
-        """G-REF announces roll result"""
-        dice_str = " ".join([f"[{val}]" for val in dice_values])
+    def add_gref_roll_result(self, player_name: str, dice_values: List[int], stashable_indices: List[int] = None):
+        """G-REF announces roll result with dice images"""
+        if stashable_indices is None:
+            stashable_indices = []
+        
+        # Create dice notation with color: <DICE>color_value</DICE>
+        dice_parts = []
+        for i, val in enumerate(dice_values):
+            color = "green" if i in stashable_indices else "white"
+            dice_parts.append(f"<DICE>{color}_{val}</DICE>")
+        
+        dice_str = " ".join(dice_parts)
         content = f"{player_name} ROLLED {dice_str}"
         context = {
             "player": player_name,
-            "dice": dice_values
+            "dice": dice_values,
+            "stashable": stashable_indices
         }
         message = GREFMessage(content, GREFCategory.ACTION_REPORT, context)
         self.add_message(message)
         return message
     
-    def add_gref_stash_action(self, player_name: str, points: int, dice_count: int):
-        """G-REF announces stash action"""
-        content = f"{player_name} STASHED {dice_count} DICE FOR {points} POINTS"
+    def add_gref_stash_action(self, player_name: str, points: int, dice_count: int, stashed_dice: List[int] = None):
+        """G-REF announces stash action with dice images"""
+        if stashed_dice and len(stashed_dice) > 0:
+            # Create dice notation for stashed dice (all green since they're being stashed)
+            dice_parts = []
+            for val in stashed_dice:
+                dice_parts.append(f"<DICE>green_{val}</DICE>")
+            dice_str = " ".join(dice_parts)
+            content = f"{player_name} STASHED {dice_str} FOR {self._format_number(points)} POINTS"
+        else:
+            content = f"{player_name} STASHED {dice_count} DICE FOR {self._format_number(points)} POINTS"
+        
         context = {
             "player": player_name,
             "points": points,
-            "dice_count": dice_count
+            "dice_count": dice_count,
+            "stashed_dice": stashed_dice
         }
         message = GREFMessage(content, GREFCategory.STASH_ACTION, context)
         self.add_message(message)
@@ -90,7 +114,7 @@ class MessageManager:
     
     def add_gref_bank_action(self, player_name: str, points: int):
         """G-REF announces bank action"""
-        content = f"{player_name} BANKED {points} POINTS"
+        content = f"{player_name} BANKED {self._format_number(points)} POINTS"
         context = {
             "player": player_name,
             "points": points
@@ -101,7 +125,7 @@ class MessageManager:
     
     def add_gref_bust(self, player_name: str, lost_points: int):
         """G-REF announces bust"""
-        content = f"{player_name} BUSTED AND LOST {lost_points} POINTS"
+        content = f"{player_name} BUSTED AND LOST {self._format_number(lost_points)} POINTS"
         context = {
             "player": player_name,
             "lost_points": lost_points
@@ -121,7 +145,7 @@ class MessageManager:
     
     def add_gref_game_end(self, winner_name: str, winner_score: int):
         """G-REF announces game end"""
-        content = f"GAME OVER! {winner_name} WINS WITH {winner_score} POINTS!"
+        content = f"GAME OVER! {winner_name} WINS WITH {self._format_number(winner_score)} POINTS!"
         context = {
             "winner": winner_name,
             "score": winner_score
