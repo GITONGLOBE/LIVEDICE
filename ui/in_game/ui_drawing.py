@@ -45,9 +45,33 @@ class UIDrawing:
         self.message_cache = {}  # {message_id: (surface, width, height, is_left)}
         self.last_message_count = 0
     
+    @staticmethod
+    def format_display_text(text: str) -> str:
+        """
+        CENTRAL TEXT FORMATTING FOR ALL DISPLAY TEXT
+        
+        Applies game-wide text formatting rules:
+        1. Convert all text to UPPERCASE
+        2. Replace all '0' (zero) with 'O' (letter O) for visual consistency
+        
+        This method should be used by ALL text rendering functions to ensure
+        consistent formatting across the entire game.
+        
+        Args:
+            text: Input text (can be str, int, float, etc.)
+            
+        Returns:
+            Formatted text string (uppercase with O instead of 0)
+        """
+        text_str = str(text)
+        text_str = text_str.upper()
+        text_str = text_str.replace('0', 'O')
+        return text_str
+    
     def draw_text_with_font(self, text: str, x: int, y: int, color: Tuple[int, int, int], font):
-        """Helper function to draw text with a specific font"""
-        text_surface = font.render(str(text), True, color)
+        """Helper function to draw text with a specific font - applies central formatting"""
+        formatted_text = self.format_display_text(text)
+        text_surface = font.render(formatted_text, True, color)
         self.ui.screen.blit(text_surface, (x, y))
 
     # DRAWING METHODS
@@ -1198,7 +1222,7 @@ class UIDrawing:
         """
         # Design constants
         MIN_WIDTH = 240
-        MAX_WIDTH = 370
+        MAX_WIDTH = 370  # REVERTED to original value per user request
         MIN_TEXT_BLOCK_HEIGHT = 40  # Min for text block (total min 60px with name bar)
         NAME_BAR_HEIGHT = 20
         ARROW_WIDTH = 20
@@ -1253,8 +1277,8 @@ class UIDrawing:
             text_font_bold = pygame.font.Font(None, 18)
             text_font_bold.set_bold(True)
         
-        # CRITICAL: Convert to ALL CAPS
-        message_content = message.content.upper()
+        # CRITICAL: Apply central formatting (uppercase + 0→O)
+        message_content = self.format_display_text(message.content)
         
         # Parse text
         text_parts = self._parse_for_textballoon(message_content)
@@ -1273,11 +1297,11 @@ class UIDrawing:
         for line_parts in text_lines:
             has_dice_in_line = any(part[0] == 'dice' for part in line_parts)
             if has_dice_in_line:
-                # Line with dice needs dice height (36px) plus some spacing
-                total_text_height += max(DICE_SIZE, line_height) + 2
+                # Line with dice needs dice height (36px) plus spacing - INCREASED from +2 to +4
+                total_text_height += max(DICE_SIZE, line_height) + 4
             else:
-                # Regular text line
-                total_text_height += line_height
+                # Regular text line - INCREASED spacing from line_height to line_height + 2
+                total_text_height += line_height + 2
         
         text_block_height = total_text_height + TEXT_PAD_TOP + TEXT_PAD_BOTTOM
         text_block_height = max(MIN_TEXT_BLOCK_HEIGHT, text_block_height)
@@ -1475,7 +1499,11 @@ class UIDrawing:
         for line_parts in lines:
             # CRITICAL FIX: Check if this line has dice for proper height
             has_dice_in_line = any(part[0] == 'dice' for part in line_parts)
-            line_height = max(dice_size, base_line_height) + 2 if has_dice_in_line else base_line_height
+            # FIXED: Increased spacing to match height calculation (dice lines +4, text lines +2)
+            if has_dice_in_line:
+                line_height = max(dice_size, base_line_height) + 4
+            else:
+                line_height = base_line_height + 2
             
             # Calculate line width
             line_width = 0

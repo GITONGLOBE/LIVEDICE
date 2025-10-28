@@ -55,8 +55,8 @@ class UIBot:
         
         print(f"{bot_name} TURN STARTED")
         
-        # G-REF announces turn start
-        self.ui.game_state.message_manager.add_gref_turn_start(bot_name, turn_number)
+        # REMOVED: add_gref_turn_start now called centrally in game_state.py for ALL players
+        # This prevents duplicate messages and ensures humans also get turn start announcements
         
         # Bot announces they're starting (personality-driven)
         context = {"turn": turn_number}

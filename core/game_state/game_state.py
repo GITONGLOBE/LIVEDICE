@@ -36,7 +36,8 @@ class Player:
         self.turn_count += 1
         self.banked_full_stashes += full_stashes_moved
         self.full_stashes_moved_this_turn = 0
-        self.game_state_manager.add_log_entry(f"{self.user.username} recorded turn {self.game_state_manager.format_number(player_turn)}: Score: {self.game_state_manager.format_number(banked_score)}, Rolls: {self.game_state_manager.format_number(rolls)}, Stashes: {self.game_state_manager.format_number(full_stashes_moved)}")
+        # REMOVED: Don't add "recorded turn" message - BANK/BUST already create G-REF messages
+        # This was creating duplicate messages in the game log
 
     def get_total_banked_full_stashes(self) -> int:
         return self.banked_full_stashes
@@ -190,27 +191,15 @@ class GameStateManager:
         if self.ui:
             self.ui.events.scroll_log_to_bottom()
 
-    def format_number(self, number: int) -> str:
-        return str(number).replace('0', 'O')
-
-    def format_dice(self, dice_values: List[int]) -> str:
-        formatted = []
-        for value in dice_values:
-            formatted.append(f'<DICE>green_{value}</DICE>')
-        return ' '.join(formatted)
-
     def reset_full_stashes_moved(self):
         self.current_player.full_stashes_moved = 0
         self.current_player.full_stashes_moved_this_turn = 0
 
     def bust(self):
-        self.bust_state = True
-        self.busted_player = self.current_player
-        self.busted_lost_score = self.referee.calculate_turn_score()
-        self.current_player.record_turn(self.current_player.turn_count + 1, 0, self.current_player.roll_count, 0)
-        self.add_log_entry(f"{self.current_player.user.username} busted and lost {self.format_number(self.busted_lost_score)} points")
-        self.referee.set_game_state(GameStateEnum.BUST_TURN_SUMMARY)
-        self.reset_full_stashes_moved()  # Add this line
+        # FIXED: Call referee.bust() which handles state + messages properly
+        # Removes duplicate message issue (add_log_entry was creating extra G-REF message)
+        self.referee.bust()
+        self.reset_full_stashes_moved()
         self.real_time_counters.update_counters(self)
 
     def roll_dice(self):
@@ -344,7 +333,8 @@ class GameStateManager:
         self.current_player.stashed_dice_scores = []
         self.current_player.stashes_this_turn = 0
         self.current_player.stash_level += 1
-        self.add_log_entry(f"{self.current_player.user.username} started a new stash, moving {stash_points} points to stash stash")
+        # REMOVED: add_log_entry() was creating duplicate messages via legacy system
+        # Start new stash is handled by referee and doesn't need separate G-REF message
         self.referee.set_game_state(GameStateEnum.STASHCHOICE_STASHED_FULL_READY_TO_ROLL)
         self.real_time_counters.update_counters(self)
 

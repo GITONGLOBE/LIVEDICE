@@ -223,6 +223,12 @@ class GameReferee:
         self.game_state_manager.current_player.roll_count = 0
         self.game_state_manager.current_player.stashed_dice_this_roll = False
         self.set_game_state(GameStateEnum.START_TURN)
+        
+        # CRITICAL: G-REF announces turn start for ALL players (human and bot)
+        # This is the CORRECT place - in the official turn start method
+        player_name = self.game_state_manager.current_player.user.username
+        turn_number = self.game_state_manager.current_turn_number
+        self.game_state_manager.message_manager.add_gref_turn_start(player_name, turn_number)
 
     def end_turn(self):
         # G-REF announces turn end for ALL players
