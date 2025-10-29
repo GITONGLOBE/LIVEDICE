@@ -46,17 +46,17 @@ class DiceRenderer:
             rotated_surface = pygame.transform.rotate(dice_surface, angle)
             dice_rect = rotated_surface.get_rect(center=(pos[0] + self.dice_size['snaptray'] // 2, pos[1] + self.dice_size['snaptray'] // 2))
             self.screen.blit(rotated_surface, dice_rect)
-            
+                     
             if i in selected_dice:
                 selected_surface = pygame.transform.rotate(self.dice_surfaces['snaptray']['selected'], angle)
                 selected_rect = selected_surface.get_rect(center=dice_rect.center)
                 self.screen.blit(selected_surface, selected_rect)
-            
+
             if i in hovered_dice:
                 hover_surface = pygame.transform.rotate(self.dice_surfaces['snaptray']['hover'], angle)
                 hover_rect = hover_surface.get_rect(center=dice_rect.center)
                 self.screen.blit(hover_surface, hover_rect)
-            
+
             dice_rects.append(dice_rect)
         return dice_rects
 

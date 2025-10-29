@@ -86,11 +86,47 @@ class UIEvents:
         # Import StashState locally to avoid circular import
         from ui.in_game.in_game_ui import StashState
         
-        # X BUTTON - Return to menu (HIGHEST PRIORITY - check first)
+        # EXIT CONFIRMATION POPUP buttons (HIGHEST PRIORITY if popup is shown)
+        if hasattr(self.ui, 'show_exit_confirmation') and self.ui.show_exit_confirmation:
+            # Check EXIT GAME button
+            if hasattr(self.ui, 'exit_game_button_rect'):
+                if self.ui.exit_game_button_rect.collidepoint(pos):
+                    print("EXIT GAME clicked - returning to startup menu")
+                    self.ui.return_to_menu = True
+                    self.ui.show_exit_confirmation = False
+                    return
+            
+            # Check RESUME button
+            if hasattr(self.ui, 'resume_game_button_rect'):
+                if self.ui.resume_game_button_rect.collidepoint(pos):
+                    print("RESUME clicked - closing confirmation popup")
+                    self.ui.show_exit_confirmation = False
+                    return
+            
+            # Click outside popup - ignore
+            popup_rect = self.ui.sections["EXIT_GAME_CONFIRMATION_POPUP"]
+            if not popup_rect.collidepoint(pos):
+                # Clicked outside popup - do nothing
+                return
+            return
+        
+        # X BUTTON - Show confirmation popup (check if not already showing)
         if hasattr(self.ui.drawing, 'x_button_rect'):
             if self.ui.drawing.x_button_rect.collidepoint(pos):
-                print("X button clicked - returning to startup menu")
-                self.ui.return_to_menu = True
+                print("X button clicked - showing exit confirmation")
+                self.ui.show_exit_confirmation = True
+                return
+        
+        # END GAME SUMMARY popup - RESTART GAME button
+        if self.ui.game_state.current_game_state == GameStateEnum.END_GAME_SUMMARY:
+            if hasattr(self.ui, 'restart_game_button_rect'):
+                if self.ui.restart_game_button_rect.collidepoint(pos):
+                    print("RESTART GAME clicked - returning to startup menu")
+                    self.ui.return_to_menu = True
+                    return
+            # Click anywhere on end game popup to continue (for now)
+            end_game_rect = self.ui.sections["END_GAME_SUMMARY_POPUP"]
+            if end_game_rect.collidepoint(pos):
                 return
         
         # Color buttons

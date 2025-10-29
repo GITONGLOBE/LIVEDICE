@@ -165,6 +165,7 @@ class InGameUI(UIInterface):
         # Bot messages migrated to message_manager in game_state
         # Return to menu flag (for X button)
         self.return_to_menu = False
+        self.show_exit_confirmation = False  # Flag for exit confirmation popup
         # Dice rectangles for click detection
         self.dice_rects = []
     

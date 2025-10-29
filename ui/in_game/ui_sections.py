@@ -51,7 +51,8 @@ class UISections:
             "READY_UP_POPUP": pygame.Rect(740, 365, 440, 350),  # Blue themed popup
             "TURN_BUST_POPUP": pygame.Rect(740, 340, 440, 400),  # Red themed popup (slightly taller for 4 lines)
             "BANKED_POINTS_POPUP": pygame.Rect(740, 340, 440, 400),  # Green themed popup (slightly taller for 4 lines)
-            "END_GAME_SUMMARY_POPUP": pygame.Rect(660, 290, 600, 500),
+            "END_GAME_SUMMARY_POPUP": pygame.Rect(660, 290, 600, 500),  # End game rankings popup
+            "EXIT_GAME_CONFIRMATION_POPUP": pygame.Rect(740, 290, 440, 340),  # Exit confirmation (20px top bar + 160px text + 80px+80px buttons)
         }
     
     def _create_colors(self) -> Dict[str, tuple]:

@@ -120,14 +120,19 @@ class UIDrawing:
         self.draw_dice()
 
         # NEW: Draw bot chat bubbles instead of old text messages
-        if self.should_draw_popup("READY_UP_POPUP"):
+        # Show exit confirmation popup if requested (HIGHEST PRIORITY)
+        if hasattr(self.ui, 'show_exit_confirmation') and self.ui.show_exit_confirmation:
+            self.draw_exit_confirmation_popup()
+        # Show end game popup if game is over
+        elif self.ui.game_state.current_game_state == GameStateEnum.END_GAME_SUMMARY:
+            self.draw_end_game_summary_popup()
+        # Show other popups based on game state
+        elif self.should_draw_popup("READY_UP_POPUP"):
             self.draw_ready_up_popup()
         elif self.should_draw_popup("TURN_BUST_POPUP"):
             self.draw_turn_bust_popup()
         elif self.should_draw_popup("BANKED_POINTS_POPUP"):
             self.draw_banked_points_popup()
-        elif self.ui.game_state.current_game_state == GameStateEnum.END_GAME_SUMMARY:
-            self.draw_end_game_summary()
 
         self.ui.scoring_info_button.draw(self.ui.screen)
         
@@ -1790,6 +1795,244 @@ class UIDrawing:
         
         return rank
 
+
+
+    def draw_end_game_summary_popup(self):
+        """
+        Draw end game summary popup showing final rankings.
+        
+        Format (based on END-GAME-SUMMARY-POPUP-SECTION.png):
+        - WOW! GG!
+        - 1 /// @WINNER-NAME WINS WITH XXXX POINTS
+        - 2 // @SECOND-PLACE XXXX POINTS  
+        - 3 / @THIRD-PLACE XXXX POINTS
+        - RESTART GAME button
+        """
+        popup_rect = self.ui.sections["END_GAME_SUMMARY_POPUP"]
+        mouse_pos = pygame.mouse.get_pos()
+        
+        # Background - BLUE
+        pygame.draw.rect(self.ui.screen, self.ui.BLUE, popup_rect)
+        
+        # Get sorted players by score
+        sorted_players = sorted(self.ui.game_state.players, 
+                               key=lambda p: p.get_total_score(), 
+                               reverse=True)
+        
+        # Title: "GAME OVER POP-UP"
+        top_bar = pygame.Rect(popup_rect.x, popup_rect.y, popup_rect.width, 20)
+        pygame.draw.rect(self.ui.screen, self.ui.DARK_BLUE, top_bar)
+        title_text = "GAME OVER POP-UP"
+        self.draw_text_with_font(title_text, popup_rect.x + 10, popup_rect.y + 5, 
+                                self.ui.WHITE, self.ui.font_minititle_black)
+        
+        y = popup_rect.y + 50
+        
+        # Celebration text
+        celebration = "WOW! GG!"
+        cel_width = self.ui.font_bigtextbar_black.size(self.format_display_text(celebration))[0]
+        self.draw_text_with_font(celebration, popup_rect.centerx - cel_width // 2, y, 
+                                self.ui.WHITE, self.ui.font_bigtextbar_black)
+        y += 60
+        
+        # Display up to 3 places
+        for i, player in enumerate(sorted_players[:3]):
+            if i == 0:
+                # Winner - larger text
+                slashes = "1 ///"
+                text = f"{slashes} {player.user.username}"
+                wins_text = "WINS"
+                points = f"WITH {self.ui.format_number(player.get_total_score())} POINTS"
+                
+                # Line 1: slashes + name + WINS
+                slash_width = self.ui.font_bigtextbar_black.size(self.format_display_text(slashes))[0]
+                name_width = self.ui.font_bigtextbar_black.size(self.format_display_text(player.user.username))[0]
+                wins_width = self.ui.font_bigtextbar_black.size(self.format_display_text(wins_text))[0]
+                
+                total_width = slash_width + name_width + wins_width + 20  # spacing
+                x = popup_rect.centerx - total_width // 2
+                
+                self.draw_text_with_font(slashes, x, y, self.ui.WHITE, self.ui.font_bigtextbar_black)
+                x += slash_width + 10
+                self.draw_text_with_font(player.user.username, x, y, self.ui.GREEN, self.ui.font_bigtextbar_black)
+                x += name_width + 10
+                self.draw_text_with_font(wins_text, x, y, self.ui.WHITE, self.ui.font_bigtextbar_black)
+                y += 50
+                
+                # Line 2: WITH XXXX POINTS
+                points_width = self.ui.font_mediumtextbar_black.size(self.format_display_text(points))[0]
+                self.draw_text_with_font(points, popup_rect.centerx - points_width // 2, y, 
+                                        self.ui.WHITE, self.ui.font_mediumtextbar_black)
+                y += 50
+                
+            else:
+                # 2nd and 3rd place
+                slashes = "2 //" if i == 1 else "3 /"
+                text = f"{slashes} {player.user.username}"
+                points = f"{self.ui.format_number(player.get_total_score())} POINTS"
+                
+                # Render on one line
+                slash_width = self.ui.font_textbar_black.size(self.format_display_text(slashes))[0]
+                name_width = self.ui.font_textbar_black.size(self.format_display_text(player.user.username))[0]
+                points_width = self.ui.font_textbar_black.size(self.format_display_text(points))[0]
+                
+                total_width = slash_width + name_width + points_width + 20  # spacing
+                x = popup_rect.centerx - total_width // 2
+                
+                self.draw_text_with_font(slashes, x, y, self.ui.WHITE, self.ui.font_textbar_black)
+                x += slash_width + 10
+                self.draw_text_with_font(player.user.username, x, y, self.ui.GREEN, self.ui.font_textbar_black)
+                x += name_width + 10
+                self.draw_text_with_font(points, x, y, self.ui.WHITE, self.ui.font_textbar_black)
+                y += 35
+        
+        # RESTART GAME button at bottom
+        button_rect = pygame.Rect(popup_rect.centerx - 200, popup_rect.bottom - 100, 400, 80)
+        is_hovering = button_rect.collidepoint(mouse_pos)
+        button_color = self.ui.RED if is_hovering else self.ui.GREEN
+        pygame.draw.rect(self.ui.screen, button_color, button_rect)
+        
+        button_text = "RESTART GAME"
+        button_text_width = self.ui.font_bigtextbar_black.size(self.format_display_text(button_text))[0]
+        self.draw_text_with_font(button_text, button_rect.centerx - button_text_width // 2,
+                                button_rect.centery - 18, self.ui.BLACK if not is_hovering else self.ui.WHITE,
+                                self.ui.font_bigtextbar_black)
+        
+        # Store button rect for click handling
+        self.ui.restart_game_button_rect = button_rect
+
+    def draw_exit_confirmation_popup(self):
+        """
+        Draw exit game confirmation popup.
+        
+        Top bar (20px): "END THE GAME // POP-UP"
+        Base text (160px): Instructions  
+        Two buttons (80px each): "EXIT GAME" and "RESUME"
+        Total height: 340px
+        """
+        mouse_pos = pygame.mouse.get_pos()
+        popup_rect = self.ui.sections["EXIT_GAME_CONFIRMATION_POPUP"]
+        
+        # Top bar (red background) - 20px height
+        top_bar = pygame.Rect(popup_rect.x, popup_rect.y, popup_rect.width, 20)
+        pygame.draw.rect(self.ui.screen, self.ui.RED, top_bar)
+        
+        # Top bar text
+        text = "END THE GAME // POP-UP"
+        self.draw_text_with_font(text, popup_rect.x + 10, popup_rect.y + 5, self.ui.BLACK, self.ui.font_minititle_black)
+        
+        # Main body (dark red background) - 160px height
+        main_body = pygame.Rect(popup_rect.x, popup_rect.y + 20, popup_rect.width, 160)
+        pygame.draw.rect(self.ui.screen, self.ui.DARK_RED, main_body)
+        
+        # Message text - 18px font, wrapped
+        text = "CLICK [ EXIT GAME ] TO LEAVE THE CURRENT GAME AND RETURN TO THE START MENU OR STAY IN THE CURRENT GAME BY CLICKING [ RESUME ]"
+        popup_text_font = self.ui.fonts.get('regular', {}).get(18, self.ui.font_textbox_black)
+        
+        # Word wrap the text
+        words = text.split()
+        lines = []
+        current_line = []
+        max_width = popup_rect.width - 40  # 20px padding on each side
+        
+        for word in words:
+            test_line = ' '.join(current_line + [word])
+            test_width = popup_text_font.size(self.format_display_text(test_line))[0]
+            if test_width <= max_width:
+                current_line.append(word)
+            else:
+                if current_line:
+                    lines.append(' '.join(current_line))
+                current_line = [word]
+        if current_line:
+            lines.append(' '.join(current_line))
+        
+        # Render wrapped text
+        y = popup_rect.y + 35
+        for line in lines:
+            formatted_line = self.format_display_text(line)
+            # Highlight [EXIT GAME] and [RESUME] in green
+            if '[' in line and ']' in line:
+                # Split by brackets and render with colors
+                parts = line.split('[')
+                x = popup_rect.x + 20
+                for part in parts:
+                    if ']' in part:
+                        bracket_content, after = part.split(']', 1)
+                        # Render bracket content in green
+                        bracket_text = self.format_display_text(f'[{bracket_content}]')
+                        self.draw_text_with_font(bracket_text, x, y, self.ui.GREEN, popup_text_font)
+                        x += popup_text_font.size(bracket_text)[0]
+                        # Render after text in white
+                        if after:
+                            after_text = self.format_display_text(after)
+                            self.draw_text_with_font(after_text, x, y, self.ui.WHITE, popup_text_font)
+                            x += popup_text_font.size(after_text)[0]
+                    else:
+                        # Regular text in white
+                        regular_text = self.format_display_text(part)
+                        self.draw_text_with_font(regular_text, x, y, self.ui.WHITE, popup_text_font)
+                        x += popup_text_font.size(regular_text)[0]
+            else:
+                text_width = popup_text_font.size(formatted_line)[0]
+                self.draw_text_with_font(line, popup_rect.x + 20, y, self.ui.WHITE, popup_text_font)
+            y += 22  # Line spacing
+        
+        # EXIT GAME button (80px height)
+        exit_button_rect = pygame.Rect(popup_rect.x, popup_rect.y + 180, popup_rect.width, 80)
+        is_hovering_exit = exit_button_rect.collidepoint(mouse_pos)
+        button_color = self.ui.RED if is_hovering_exit else self.ui.BLUE
+        pygame.draw.rect(self.ui.screen, button_color, exit_button_rect)
+        
+        # EXIT GAME button text
+        button_text = "EXIT GAME"
+        button_text_width = self.ui.font_bigtextbar_black.size(self.format_display_text(button_text))[0]
+        self.draw_text_with_font(button_text, exit_button_rect.centerx - button_text_width // 2, 
+                                exit_button_rect.centery - 18, self.ui.WHITE, self.ui.font_bigtextbar_black)
+        
+        # RESUME button (80px height)
+        resume_button_rect = pygame.Rect(popup_rect.x, popup_rect.y + 260, popup_rect.width, 80)
+        is_hovering_resume = resume_button_rect.collidepoint(mouse_pos)
+        button_color = self.ui.RED if is_hovering_resume else self.ui.GREEN
+        pygame.draw.rect(self.ui.screen, button_color, resume_button_rect)
+        
+        # RESUME button text
+        button_text = "RESUME"
+        button_text_width = self.ui.font_bigtextbar_black.size(self.format_display_text(button_text))[0]
+        self.draw_text_with_font(button_text, resume_button_rect.centerx - button_text_width // 2,
+                                resume_button_rect.centery - 18, self.ui.BLACK if not is_hovering_resume else self.ui.WHITE, 
+                                self.ui.font_bigtextbar_black)
+        
+        # Store button rects for click handling
+        self.ui.exit_game_button_rect = exit_button_rect
+        self.ui.resume_game_button_rect = resume_button_rect
+
+    def draw_x_button(self):
+        """
+        Draw X button in top right corner using new images.
+        Position: X=1380, Y=20
+        Size: 40x40px (exact size of button image)
+        Images: closegame-box.jpg (normal), closegame-box-hover.jpg (hover)
+        """
+        # Load images if not already loaded
+        if not hasattr(self.ui, 'x_button_image'):
+            import os
+            self.ui.x_button_image = pygame.image.load(os.path.join("assets", "closegame-box.jpg"))
+            self.ui.x_button_hover_image = pygame.image.load(os.path.join("assets", "closegame-box-hover.jpg"))
+        
+        # X button rect - UPDATED POSITION: X=1380, Y=20, Size=40x40
+        self.x_button_rect = pygame.Rect(1380, 20, 40, 40)
+        
+        # Check if mouse is hovering
+        mouse_pos = pygame.mouse.get_pos()
+        is_hovering = self.x_button_rect.collidepoint(mouse_pos)
+        
+        # Draw appropriate image
+        if is_hovering:
+            self.ui.screen.blit(self.ui.x_button_hover_image, self.x_button_rect.topleft)
+        else:
+            self.ui.screen.blit(self.ui.x_button_image, self.x_button_rect.topleft)
+
     def draw_dicecup(self):
         """Draw dicecup section"""
         rect = self.ui.sections["DICECUP"]
@@ -1815,7 +2058,7 @@ class UIDrawing:
             dice_image = pygame.image.load(os.path.join("assets", f"dicecup_{remaining_dice}.png"))
 
         self.ui.screen.blit(cup_image, (rect.left, rect.top))
-        self.ui.screen.blit(dice_image, (rect.left + 170, rect.top))  # FIXED: Moved 100px left
+        # Dice image will be drawn after hover check
 
         self.ui.dicecup_rect.topleft = (rect.left, rect.top)
 
@@ -1825,6 +2068,8 @@ class UIDrawing:
             if self.ui.dicecup_mask.get_at(relative_pos) and self.ui.game_state.referee.can_roll():
                 self.ui.screen.blit(self.ui.dicecup_hover, (rect.left, rect.top))
                 if not self.ui.rotating_image.rotating:
+        # CRITICAL FIX: Draw dice image AFTER hover (on top of green outline)
+        self.ui.screen.blit(dice_image, (rect.left + 170, rect.top))  # FIXED: Moved 100px left
                     self.ui.rotating_image.start_rotation()
             else:
                 self.ui.rotating_image.stop_rotation()
@@ -1919,10 +2164,12 @@ class UIDrawing:
         main_body = pygame.Rect(popup_rect.x, popup_rect.y + 20, popup_rect.width, popup_rect.height - 100)
         pygame.draw.rect(self.ui.screen, self.ui.DARK_BLUE, main_body)
         
-        # Render messages - center-aligned, 12px font
+        # Render messages - center-aligned, 18px font (same as game data log)
         y = popup_rect.y + 40
-        line_spacing = 20
+        line_spacing = 22
         player_name = self.ui.game_state.current_player.user.username
+        # Use 18px font (same as game data log)
+        popup_text_font = self.ui.fonts.get('regular', {}).get(18, self.ui.font_textbox_black)
         
         for i, line in enumerate(message_lines):
             # Special handling: green for player name, white for everything else
@@ -1934,9 +2181,9 @@ class UIDrawing:
                 # Calculate total width for centering
                 total_width = 0
                 for part in parts[:-1]:
-                    total_width += self.ui.font_textbox_black.size(self.format_display_text(part))[0]
-                    total_width += self.ui.font_textbox_black.size(self.format_display_text(player_name))[0]
-                total_width += self.ui.font_textbox_black.size(self.format_display_text(parts[-1]))[0]
+                    total_width += popup_text_font.size(self.format_display_text(part))[0]
+                    total_width += popup_text_font.size(self.format_display_text(player_name))[0]
+                total_width += popup_text_font.size(self.format_display_text(parts[-1]))[0]
                 
                 # Start x position (centered)
                 x = popup_rect.centerx - total_width // 2
@@ -1944,33 +2191,33 @@ class UIDrawing:
                 # Render parts
                 for j, part in enumerate(parts):
                     if part:
-                        self.draw_text_with_font(part, x, y, self.ui.WHITE, self.ui.font_textbox_black)
-                        x += self.ui.font_textbox_black.size(self.format_display_text(part))[0]
+                        self.draw_text_with_font(part, x, y, self.ui.WHITE, popup_text_font)
+                        x += popup_text_font.size(self.format_display_text(part))[0]
                     if j < len(parts) - 1:
                         # Render player name in green
-                        self.draw_text_with_font(player_name, x, y, self.ui.GREEN, self.ui.font_textbox_black)
-                        x += self.ui.font_textbox_black.size(self.format_display_text(player_name))[0]
+                        self.draw_text_with_font(player_name, x, y, self.ui.GREEN, popup_text_font)
+                        x += popup_text_font.size(self.format_display_text(player_name))[0]
             
             # Check if line contains point values (numbers followed by "POINTS")
             elif "POINTS" in line:
                 # Find all numbers in the line and make them green
                 words = line.split()
-                total_width = sum(self.ui.font_textbox_black.size(self.format_display_text(w + " "))[0] for w in words)
+                total_width = sum(popup_text_font.size(self.format_display_text(w + " "))[0] for w in words)
                 x = popup_rect.centerx - total_width // 2
                 
                 for word in words:
                     # Check if word is a number (contains digits) or is a place ranking (1ST, 2ND, etc.)
                     is_number = any(c.isdigit() or c == 'O' for c in word) and not word.startswith('@')
                     color = self.ui.GREEN if is_number else self.ui.WHITE
-                    font = self.ui.font_textbox_black if not is_number else self.ui.font_textbox_black
+                    font = popup_text_font if not is_number else popup_text_font
                     
                     self.draw_text_with_font(word, x, y, color, font)
-                    x += self.ui.font_textbox_black.size(self.format_display_text(word + " "))[0]
+                    x += popup_text_font.size(self.format_display_text(word + " "))[0]
             
             else:
                 # Regular line - center-aligned, white text
-                text_width = self.ui.font_textbox_black.size(self.format_display_text(line))[0]
-                self.draw_text_with_font(line, popup_rect.centerx - text_width // 2, y, self.ui.WHITE, self.ui.font_textbox_black)
+                text_width = popup_text_font.size(self.format_display_text(line))[0]
+                self.draw_text_with_font(line, popup_rect.centerx - text_width // 2, y, self.ui.WHITE, popup_text_font)
             
             y += line_spacing
         
@@ -2018,10 +2265,12 @@ class UIDrawing:
         main_body = pygame.Rect(popup_rect.x, popup_rect.y + 20, popup_rect.width, popup_rect.height - 100)
         pygame.draw.rect(self.ui.screen, self.ui.DARK_RED, main_body)
         
-        # Render messages - center-aligned, 12px font
+        # Render messages - center-aligned, 18px font (same as game data log)
         y = popup_rect.y + 40
-        line_spacing = 20
+        line_spacing = 22
         player_name = self.ui.game_state.current_player.user.username
+        # Use 18px font (same as game data log)
+        popup_text_font = self.ui.fonts.get('regular', {}).get(18, self.ui.font_textbox_black)
         
         for i, line in enumerate(message_lines):
             # Special handling: green for player name and point values
@@ -2030,24 +2279,24 @@ class UIDrawing:
                 parts = line.split(player_name)
                 total_width = 0
                 for part in parts[:-1]:
-                    total_width += self.ui.font_textbox_black.size(self.format_display_text(part))[0]
-                    total_width += self.ui.font_textbox_black.size(self.format_display_text(player_name))[0]
-                total_width += self.ui.font_textbox_black.size(self.format_display_text(parts[-1]))[0]
+                    total_width += popup_text_font.size(self.format_display_text(part))[0]
+                    total_width += popup_text_font.size(self.format_display_text(player_name))[0]
+                total_width += popup_text_font.size(self.format_display_text(parts[-1]))[0]
                 
                 x = popup_rect.centerx - total_width // 2
                 
                 for j, part in enumerate(parts):
                     if part:
-                        self.draw_text_with_font(part, x, y, self.ui.WHITE, self.ui.font_textbox_black)
-                        x += self.ui.font_textbox_black.size(self.format_display_text(part))[0]
+                        self.draw_text_with_font(part, x, y, self.ui.WHITE, popup_text_font)
+                        x += popup_text_font.size(self.format_display_text(part))[0]
                     if j < len(parts) - 1:
-                        self.draw_text_with_font(player_name, x, y, self.ui.GREEN, self.ui.font_textbox_black)
-                        x += self.ui.font_textbox_black.size(self.format_display_text(player_name))[0]
+                        self.draw_text_with_font(player_name, x, y, self.ui.GREEN, popup_text_font)
+                        x += popup_text_font.size(self.format_display_text(player_name))[0]
             
             # Check if line contains "LOSING X POINTS" - make number green
             elif "POINTS" in line and "LOSING" in line:
                 words = line.split()
-                total_width = sum(self.ui.font_textbox_black.size(self.format_display_text(w + " "))[0] for w in words)
+                total_width = sum(popup_text_font.size(self.format_display_text(w + " "))[0] for w in words)
                 x = popup_rect.centerx - total_width // 2
                 
                 for word in words:
@@ -2055,13 +2304,13 @@ class UIDrawing:
                     is_number = any(c.isdigit() or c == 'O' for c in word) and word not in ["LOSING", "POINTS"]
                     color = self.ui.GREEN if is_number else self.ui.WHITE
                     
-                    self.draw_text_with_font(word, x, y, color, self.ui.font_textbox_black)
-                    x += self.ui.font_textbox_black.size(self.format_display_text(word + " "))[0]
+                    self.draw_text_with_font(word, x, y, color, popup_text_font)
+                    x += popup_text_font.size(self.format_display_text(word + " "))[0]
             
             else:
                 # Regular line - center-aligned, white text
-                text_width = self.ui.font_textbox_black.size(self.format_display_text(line))[0]
-                self.draw_text_with_font(line, popup_rect.centerx - text_width // 2, y, self.ui.WHITE, self.ui.font_textbox_black)
+                text_width = popup_text_font.size(self.format_display_text(line))[0]
+                self.draw_text_with_font(line, popup_rect.centerx - text_width // 2, y, self.ui.WHITE, popup_text_font)
             
             y += line_spacing
         
@@ -2109,10 +2358,12 @@ class UIDrawing:
         main_body = pygame.Rect(popup_rect.x, popup_rect.y + 20, popup_rect.width, popup_rect.height - 100)
         pygame.draw.rect(self.ui.screen, self.ui.DARK_GREEN, main_body)
         
-        # Render messages - center-aligned, 12px font
+        # Render messages - center-aligned, 18px font (same as game data log)
         y = popup_rect.y + 40
-        line_spacing = 20
+        line_spacing = 22
         player_name = self.ui.game_state.current_player.user.username
+        # Use 18px font (same as game data log)
+        popup_text_font = self.ui.fonts.get('regular', {}).get(18, self.ui.font_textbox_black)
         
         for i, line in enumerate(message_lines):
             # Special handling: green for player name and point values
@@ -2121,24 +2372,24 @@ class UIDrawing:
                 parts = line.split(player_name)
                 total_width = 0
                 for part in parts[:-1]:
-                    total_width += self.ui.font_textbox_black.size(self.format_display_text(part))[0]
-                    total_width += self.ui.font_textbox_black.size(self.format_display_text(player_name))[0]
-                total_width += self.ui.font_textbox_black.size(self.format_display_text(parts[-1]))[0]
+                    total_width += popup_text_font.size(self.format_display_text(part))[0]
+                    total_width += popup_text_font.size(self.format_display_text(player_name))[0]
+                total_width += popup_text_font.size(self.format_display_text(parts[-1]))[0]
                 
                 x = popup_rect.centerx - total_width // 2
                 
                 for j, part in enumerate(parts):
                     if part:
-                        self.draw_text_with_font(part, x, y, self.ui.WHITE, self.ui.font_textbox_black)
-                        x += self.ui.font_textbox_black.size(self.format_display_text(part))[0]
+                        self.draw_text_with_font(part, x, y, self.ui.WHITE, popup_text_font)
+                        x += popup_text_font.size(self.format_display_text(part))[0]
                     if j < len(parts) - 1:
-                        self.draw_text_with_font(player_name, x, y, self.ui.GREEN, self.ui.font_textbox_black)
-                        x += self.ui.font_textbox_black.size(self.format_display_text(player_name))[0]
+                        self.draw_text_with_font(player_name, x, y, self.ui.GREEN, popup_text_font)
+                        x += popup_text_font.size(self.format_display_text(player_name))[0]
             
             # Check if line contains "POINTS" or place rankings - make numbers green
             elif "POINTS" in line or "PLACE" in line or "POSITION" in line or "1ST" in line or "2ND" in line or "3RD" in line:
                 words = line.split()
-                total_width = sum(self.ui.font_textbox_black.size(self.format_display_text(w + " "))[0] for w in words)
+                total_width = sum(popup_text_font.size(self.format_display_text(w + " "))[0] for w in words)
                 x = popup_rect.centerx - total_width // 2
                 
                 for word in words:
@@ -2146,15 +2397,15 @@ class UIDrawing:
                     is_number = (any(c.isdigit() or c == 'O' for c in word) and not word.startswith('@')) or \
                                word.endswith('ST') or word.endswith('ND') or word.endswith('RD') or word.endswith('TH')
                     color = self.ui.GREEN if is_number else self.ui.WHITE
-                    font = self.ui.font_textbox_black
+                    font = popup_text_font
                     
                     self.draw_text_with_font(word, x, y, color, font)
-                    x += self.ui.font_textbox_black.size(self.format_display_text(word + " "))[0]
+                    x += popup_text_font.size(self.format_display_text(word + " "))[0]
             
             else:
                 # Regular line - center-aligned, white text
-                text_width = self.ui.font_textbox_black.size(self.format_display_text(line))[0]
-                self.draw_text_with_font(line, popup_rect.centerx - text_width // 2, y, self.ui.WHITE, self.ui.font_textbox_black)
+                text_width = popup_text_font.size(self.format_display_text(line))[0]
+                self.draw_text_with_font(line, popup_rect.centerx - text_width // 2, y, self.ui.WHITE, popup_text_font)
             
             y += line_spacing
         

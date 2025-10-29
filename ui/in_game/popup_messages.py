@@ -19,6 +19,8 @@ class PopupMessageGenerator:
             game_state: GameStateManager instance
         """
         self.game_state = game_state
+        # CRITICAL FIX: Cache for message variations to prevent rapid switching
+        self._message_cache = {}
     
     def _format_number(self, number: int) -> str:
         """Format number with O instead of 0"""
@@ -94,8 +96,13 @@ class PopupMessageGenerator:
         Generate ready up popup messages with variations.
         
         Returns:
-            List of message lines (player name will be handled separately)
+            List of message lines (ONE variation cached per turn)
         """
+        # CRITICAL FIX: Cache messages to prevent rapid switching
+        cache_key = f"ready_{self.game_state.current_player.user.username}_{self.game_state.current_player.turn_count}"
+        if cache_key in self._message_cache:
+            return self._message_cache[cache_key]
+        
         info = self.get_leaderboard_info()
         player_name = self.game_state.current_player.user.username
         
@@ -123,6 +130,7 @@ class PopupMessageGenerator:
         encouragement = self._get_ready_up_encouragement(info)
         messages.append(encouragement)
         
+        self._message_cache[cache_key] = messages
         return messages
     
     def _get_ready_up_situational_message(self, info: Dict, player_name: str) -> Optional[str]:
@@ -189,8 +197,13 @@ class PopupMessageGenerator:
         Generate banked popup messages with variations.
         
         Returns:
-            List of message lines
+            List of message lines (ONE variation cached per turn)
         """
+        # CRITICAL FIX: Cache messages to prevent rapid switching
+        cache_key = f"banked_{self.game_state.current_player.user.username}_{self.game_state.current_player.turn_count}"
+        if cache_key in self._message_cache:
+            return self._message_cache[cache_key]
+        
         info = self.get_leaderboard_info()
         player_name = self.game_state.current_player.user.username
         banked_points = self.game_state.referee.calculate_turn_score()
@@ -229,6 +242,7 @@ class PopupMessageGenerator:
         if situational:
             messages.append(situational)
         
+        self._message_cache[cache_key] = messages
         return messages
     
     def _get_banked_situational_message(self, info: Dict, banked_points: int) -> Optional[str]:
@@ -282,8 +296,13 @@ class PopupMessageGenerator:
         Generate bust popup messages.
         
         Returns:
-            List of message lines
+            List of message lines (ONE variation cached per turn)
         """
+        # CRITICAL FIX: Cache messages to prevent rapid switching
+        cache_key = f"bust_{self.game_state.current_player.user.username}_{self.game_state.current_player.turn_count}"
+        if cache_key in self._message_cache:
+            return self._message_cache[cache_key]
+        
         player_name = self.game_state.current_player.user.username
         lost_points = self.game_state.referee.calculate_turn_score()
         
@@ -308,4 +327,5 @@ class PopupMessageGenerator:
         # Line 4: Points lost
         messages.append(f"LOSING {self._format_number(lost_points)} POINTS")
         
+        self._message_cache[cache_key] = messages
         return messages
