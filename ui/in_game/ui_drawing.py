@@ -134,14 +134,14 @@ class UIDrawing:
         elif self.should_draw_popup("BANKED_POINTS_POPUP"):
             self.draw_banked_points_popup()
 
-        self.ui.scoring_info_button.draw(self.ui.screen)
+        # REMOVED: self.ui.scoring_info_button.draw(self.ui.screen)  # Old question mark button
         
         # Draw X button (overlay on top right corner)
         self.draw_x_button()
 
-        # Draw color change buttons
-        for button in self.ui.color_buttons.values():
-            button.draw(self.ui.screen)
+        # REMOVED: color change buttons
+        # for button in self.ui.color_buttons.values():
+        #     button.draw(self.ui.screen)
 
         pygame.display.update()
     
@@ -295,7 +295,7 @@ class UIDrawing:
             rank_text = str(i + 1)
             self.draw_text_with_font(rank_text, rect.x + 10, y, self.ui.CYAN, self.ui.font_textbox_black)
             
-            # Player name (green text, left-aligned)
+            # Player name (GREEN for all players - bot colors only on textballoon lines)
             self.draw_text_with_font(player.user.username, rect.x + 70, y, self.ui.GREEN, self.ui.font_textbox_black)
             
             # Player score (white text, right-aligned)
@@ -377,9 +377,14 @@ class UIDrawing:
             for i, line in enumerate(lines):
                 self.draw_text_with_font(line, rect.x + 10, y_offset + 5 + (i * 14), self.ui.CYAN, self.ui.font_textbox_black)
             
-            # Value column (right side)
-            value_width = self.ui.font_textbar_black.size(value_text)[0]
-            self.draw_text_with_font(value_text, rect.x + 150 - value_width, y_offset + 10, self.ui.WHITE, self.ui.font_textbar_black)
+            # Value column (right side) - CHANGED: 10px right padding, 5px top padding, 20px font
+            # Use 20px font for values (CHANGED from font_textbar_black which is 23px)
+            try:
+                value_font = self.ui.fonts.get('black', {}).get(20, pygame.font.Font(None, 20))
+            except:
+                value_font = pygame.font.Font(None, 20)
+            value_width = value_font.size(value_text)[0]
+            self.draw_text_with_font(value_text, rect.x + 160 - value_width - 10, y_offset + 5, self.ui.WHITE, value_font)
             
             y_offset += 40
 
@@ -1270,17 +1275,17 @@ class UIDrawing:
             text_align = 'right'
         
         # Fonts (FIXED: using open-sauce-two font with correct sizes)
-        # Name bar: 16px BLACK (same as left panel top bars - textbar_black)
-        # Message text: 18px regular (between name bar and old 24px)
+        # Name bar: 12px BLACK (font_minititle_black) - CHANGED from 10px
+        # Message text: 20px MEDIUM (descriptive text) - CHANGED from 23px
         try:
-            name_font = self.ui.fonts.get('black', {}).get(16, pygame.font.Font(None, 16))
-            text_font = self.ui.fonts.get('regular', {}).get(18, pygame.font.Font(None, 18))
-            text_font_bold = self.ui.fonts.get('black', {}).get(18, pygame.font.Font(None, 18))  # BLACK for highlights
+            name_font = self.ui.fonts.get('black', {}).get(12, pygame.font.Font(None, 12))  # CHANGED: 10→12
+            text_font = self.ui.fonts.get('medium', {}).get(20, pygame.font.Font(None, 20))  # CHANGED: 23→20
+            text_font_bold = self.ui.fonts.get('black', {}).get(20, pygame.font.Font(None, 20))  # BLACK for highlights, 23→20
         except:
             # Fallback to system font if open-sauce-two not available
-            name_font = pygame.font.Font(None, 16)
-            text_font = pygame.font.Font(None, 18)
-            text_font_bold = pygame.font.Font(None, 18)
+            name_font = pygame.font.Font(None, 12)  # CHANGED: 10→12
+            text_font = pygame.font.Font(None, 20)  # CHANGED: 23→20
+            text_font_bold = pygame.font.Font(None, 20)  # CHANGED: 23→20
             text_font_bold.set_bold(True)
         
         # CRITICAL: Apply central formatting (uppercase + 0→O)
@@ -1340,11 +1345,32 @@ class UIDrawing:
             name_x = ARROW_WIDTH + NAME_PAD_LEFT
             name_y = (NAME_BAR_HEIGHT - name_font.get_height()) // 2
             
-            gref_surf = name_font.render("@G-REF", True, NAME_COLOR_GREF)
+            # @G-REF name bar: "@G-REF" and "GAME" in BLACK, rest in MEDIUM
+            # Need both BLACK and MEDIUM fonts at 12px (CHANGED from 10px)
+            try:
+                name_font_black = self.ui.fonts.get('black', {}).get(12, pygame.font.Font(None, 12))
+                name_font_medium = self.ui.fonts.get('medium', {}).get(12, pygame.font.Font(None, 12))
+            except:
+                name_font_black = pygame.font.Font(None, 12)
+                name_font_medium = pygame.font.Font(None, 12)
+            
+            # Render: "@G-REF" (BLACK)
+            gref_surf = name_font_black.render("@G-REF", True, NAME_COLOR_GREF)
             surface.blit(gref_surf, (name_x, name_y))
             name_x += gref_surf.get_width()
             
-            official_surf = name_font.render(" [ GAMEOFFICIAL ]", True, NAME_COLOR_TEXT)
+            # Render: " [ " (MEDIUM)
+            bracket1_surf = name_font_medium.render(" [ ", True, NAME_COLOR_TEXT)
+            surface.blit(bracket1_surf, (name_x, name_y))
+            name_x += bracket1_surf.get_width()
+            
+            # Render: "GAME" (BLACK)
+            game_surf = name_font_black.render("GAME", True, NAME_COLOR_TEXT)
+            surface.blit(game_surf, (name_x, name_y))
+            name_x += game_surf.get_width()
+            
+            # Render: "OFFICIAL ]" (MEDIUM)
+            official_surf = name_font_medium.render("OFFICIAL ]", True, NAME_COLOR_TEXT)
             surface.blit(official_surf, (name_x, name_y))
             
             # 2. TEXT BLOCK (colored background)
@@ -1375,8 +1401,8 @@ class UIDrawing:
         else:
             # BOT LAYOUT (right-aligned)
             
-            # 1. NAME BAR (transparent background, text only)
-            bot_name_surf = name_font.render(message.sender, True, NAME_COLOR)
+            # 1. NAME BAR (transparent background, text only) - GREEN for all bots
+            bot_name_surf = name_font.render(message.sender, True, NAME_COLOR)  # Always green
             name_x = balloon_width - ARROW_WIDTH - bot_name_surf.get_width() - NAME_PAD_RIGHT
             name_y = (NAME_BAR_HEIGHT - name_font.get_height()) // 2
             surface.blit(bot_name_surf, (name_x, name_y))
@@ -1386,6 +1412,27 @@ class UIDrawing:
             text_block_width = balloon_width - ARROW_WIDTH
             text_rect = pygame.Rect(0, text_block_y, text_block_width, text_block_height)
             pygame.draw.rect(surface, BG_COLOR, text_rect)
+            
+            # 2b. COLORED LINE at top (2px) - Bot-specific colors (all difficulty levels)
+            # Bot color mapping: Bot1=magenta, Bot2=cyan, Bot3=yellow, Bot4=green
+            # Works for EASY-GO-BOT, NORMAL-GO-BOT, and HARD-GO-BOT
+            bot_colors = {
+                '@EASY-GO-BOT-1': (255, 0, 255),  # Magenta
+                '@EASY-GO-BOT-2': (0, 255, 255),  # Cyan
+                '@EASY-GO-BOT-3': (255, 255, 0),  # Yellow
+                '@EASY-GO-BOT-4': (0, 255, 0),    # Green
+                '@NORMAL-GO-BOT-1': (255, 0, 255),  # Magenta
+                '@NORMAL-GO-BOT-2': (0, 255, 255),  # Cyan
+                '@NORMAL-GO-BOT-3': (255, 255, 0),  # Yellow
+                '@NORMAL-GO-BOT-4': (0, 255, 0),    # Green
+                '@HARD-GO-BOT-1': (255, 0, 255),  # Magenta
+                '@HARD-GO-BOT-2': (0, 255, 255),  # Cyan
+                '@HARD-GO-BOT-3': (255, 255, 0),  # Yellow
+                '@HARD-GO-BOT-4': (0, 255, 0),    # Green
+            }
+            bot_line_color = bot_colors.get(message.sender, (0, 255, 0))  # Default green
+            colored_line_rect = pygame.Rect(0, text_block_y, text_block_width, 2)
+            pygame.draw.rect(surface, bot_line_color, colored_line_rect)
             
             # 3. ARROW (right-angled triangle pointing RIGHT - properly mirrored from G-REF)
             arrow_y = text_block_y + 10  # FIXED: moved 10px down
@@ -1708,20 +1755,20 @@ class UIDrawing:
             if word.startswith("<DICE>") and word.endswith("</DICE>"):
                 word_width = 36
             else:
-                word_width = self.ui.fonts['regular'][16].size(word)[0]
+                word_width = self.ui.fonts['regular'][23].size(word)[0]
             if x + word_width > max_width:
                 lines += 1
                 x = word_width
             else:
                 x += word_width + 5
-        return lines * (self.ui.fonts['regular'][16].get_height() + 2) + 10
+        return lines * (self.ui.fonts['regular'][23].get_height() + 2) + 10
         
     def render_log_line(self, surface, line, x, y):
         """Render a single log line with formatting"""
         words = line.split()
         start_x = x
         max_width = surface.get_width() - 30
-        line_height = self.ui.fonts['regular'][16].get_height() + 5
+        line_height = self.ui.fonts['regular'][23].get_height() + 5
 
         for i, word in enumerate(words):
             if word.startswith("<DICE>") and word.endswith("</DICE>"):
@@ -1733,26 +1780,26 @@ class UIDrawing:
                 x = self.ui.dice_renderer.render_dice_in_log(surface, dice_info, x, y)
             elif word.startswith("<prefix>") and word.endswith("</prefix>"):
                 prefix = word[8:-9]
-                word_surface = self.ui.fonts['regular'][16].render(prefix, True, self.ui.WHITE)
+                word_surface = self.ui.fonts['regular'][23].render(prefix, True, self.ui.WHITE)
                 word_width = word_surface.get_width()
-                prefix_rect = pygame.Rect(x, y, word_width, self.ui.fonts['regular'][16].get_height())
+                prefix_rect = pygame.Rect(x, y, word_width, self.ui.fonts['regular'][23].get_height())
                 pygame.draw.rect(surface, self.ui.BLUE, prefix_rect)
                 surface.blit(word_surface, (x, y))
                 x += word_width + 5
             elif word.startswith("<player>") and word.endswith("</player>") or word.startswith("@GO-BOT-") or word.startswith("@VIDEO-GAMER-"):
                 player = word[8:-9] if word.startswith("<player>") else word
-                word_surface = self.ui.fonts['bold'][16].render(player, True, self.ui.GREEN)
+                word_surface = self.ui.fonts['bold'][23].render(player, True, self.ui.GREEN)
                 word_width = word_surface.get_width()
                 surface.blit(word_surface, (x, y))
                 x += word_width + 5
             elif word.startswith("<green>") and word.endswith("</green>"):
                 green_text = word[7:-8]
-                word_surface = self.ui.fonts['regular'][16].render(green_text, True, self.ui.GREEN)
+                word_surface = self.ui.fonts['regular'][23].render(green_text, True, self.ui.GREEN)
                 word_width = word_surface.get_width()
                 surface.blit(word_surface, (x, y))
                 x += word_width + 5
             else:
-                word_surface = self.ui.fonts['regular'][16].render(word, True, self.ui.WHITE)
+                word_surface = self.ui.fonts['regular'][23].render(word, True, self.ui.WHITE)
                 word_width = word_surface.get_width()
                 if x + word_width > max_width:
                     x = start_x
@@ -1919,7 +1966,7 @@ class UIDrawing:
         
         # Top bar text
         text = "END THE GAME // POP-UP"
-        self.draw_text_with_font(text, popup_rect.x + 10, popup_rect.y + 5, self.ui.BLACK, self.ui.font_minititle_black)
+        self.draw_text_with_font(text, popup_rect.x + 10, popup_rect.y + 5, self.ui.WHITE, self.ui.font_minititle_black)  # CHANGED: BLACK→WHITE
         
         # Main body (dark red background) - 160px height
         main_body = pygame.Rect(popup_rect.x, popup_rect.y + 20, popup_rect.width, 160)
@@ -1927,7 +1974,7 @@ class UIDrawing:
         
         # Message text - 18px font, wrapped
         text = "CLICK [ EXIT GAME ] TO LEAVE THE CURRENT GAME AND RETURN TO THE START MENU OR STAY IN THE CURRENT GAME BY CLICKING [ RESUME ]"
-        popup_text_font = self.ui.fonts.get('regular', {}).get(18, self.ui.font_textbox_black)
+        popup_text_font = self.ui.fonts.get('medium', {}).get(23, self.ui.font_textbox_black)
         
         # Word wrap the text
         words = text.split()
@@ -2068,13 +2115,14 @@ class UIDrawing:
             if self.ui.dicecup_mask.get_at(relative_pos) and self.ui.game_state.referee.can_roll():
                 self.ui.screen.blit(self.ui.dicecup_hover, (rect.left, rect.top))
                 if not self.ui.rotating_image.rotating:
-        # CRITICAL FIX: Draw dice image AFTER hover (on top of green outline)
-        self.ui.screen.blit(dice_image, (rect.left + 170, rect.top))  # FIXED: Moved 100px left
                     self.ui.rotating_image.start_rotation()
             else:
                 self.ui.rotating_image.stop_rotation()
         else:
             self.ui.rotating_image.stop_rotation()
+
+        # CRITICAL FIX: Draw dice image AFTER hover (on top of green outline)
+        self.ui.screen.blit(dice_image, (rect.left + 170, rect.top))  # FIXED: Moved 100px left
 
         self.ui.rotating_image.update()
         self.ui.rotating_image.draw(self.ui.screen)
@@ -2091,7 +2139,7 @@ class UIDrawing:
                 lost_points = self.ui.game_state.busted_lost_score
                 
                 prefix = "@G-REF.:"
-                prefix_surface = self.ui.fonts['regular'][18].render(prefix, True, self.ui.WHITE)
+                prefix_surface = self.ui.fonts['regular'][23].render(prefix, True, self.ui.WHITE)
                 prefix_rect = prefix_surface.get_rect(topleft=(self.ui.bust_text_box.left + 10, self.ui.bust_text_box.top + 10))
                 pygame.draw.rect(self.ui.screen, self.ui.BLUE, prefix_rect)
                 self.ui.screen.blit(prefix_surface, prefix_rect)
@@ -2154,7 +2202,7 @@ class UIDrawing:
         
         # Top bar text "READY UP // POPUP" - 10px font with 10px left padding
         text = "READY UP // POPUP"
-        self.draw_text_with_font(text, popup_rect.x + 10, popup_rect.y + 5, self.ui.BLACK, self.ui.font_minititle_black)
+        self.draw_text_with_font(text, popup_rect.x + 10, popup_rect.y + 5, self.ui.WHITE, self.ui.font_minititle_black)  # CHANGED: BLACK→WHITE
         
         # Generate dynamic messages
         msg_gen = PopupMessageGenerator(self.ui.game_state)
@@ -2166,10 +2214,10 @@ class UIDrawing:
         
         # Render messages - center-aligned, 18px font (same as game data log)
         y = popup_rect.y + 40
-        line_spacing = 22
+        line_spacing = 26
         player_name = self.ui.game_state.current_player.user.username
-        # Use 18px font (same as game data log)
-        popup_text_font = self.ui.fonts.get('regular', {}).get(18, self.ui.font_textbox_black)
+        # Use 23px MEDIUM font (same as game data log)
+        popup_text_font = self.ui.fonts.get('medium', {}).get(23, self.ui.font_textbox_black)
         
         for i, line in enumerate(message_lines):
             # Special handling: green for player name, white for everything else
@@ -2255,7 +2303,7 @@ class UIDrawing:
         
         # Top bar text "TURN BUST // POPUP" - 10px font with 10px left padding
         text = "TURN BUST // POPUP"
-        self.draw_text_with_font(text, popup_rect.x + 10, popup_rect.y + 5, self.ui.BLACK, self.ui.font_minititle_black)
+        self.draw_text_with_font(text, popup_rect.x + 10, popup_rect.y + 5, self.ui.WHITE, self.ui.font_minititle_black)  # CHANGED: BLACK→WHITE
         
         # Generate messages
         msg_gen = PopupMessageGenerator(self.ui.game_state)
@@ -2267,10 +2315,10 @@ class UIDrawing:
         
         # Render messages - center-aligned, 18px font (same as game data log)
         y = popup_rect.y + 40
-        line_spacing = 22
+        line_spacing = 26
         player_name = self.ui.game_state.current_player.user.username
-        # Use 18px font (same as game data log)
-        popup_text_font = self.ui.fonts.get('regular', {}).get(18, self.ui.font_textbox_black)
+        # Use 23px MEDIUM font (same as game data log)
+        popup_text_font = self.ui.fonts.get('medium', {}).get(23, self.ui.font_textbox_black)
         
         for i, line in enumerate(message_lines):
             # Special handling: green for player name and point values
@@ -2348,7 +2396,7 @@ class UIDrawing:
         
         # Top bar text "BANKED POINTS // POPUP" - 10px font with 10px left padding
         text = "BANKED POINTS // POPUP"
-        self.draw_text_with_font(text, popup_rect.x + 10, popup_rect.y + 5, self.ui.BLACK, self.ui.font_minititle_black)
+        self.draw_text_with_font(text, popup_rect.x + 10, popup_rect.y + 5, self.ui.WHITE, self.ui.font_minititle_black)  # CHANGED: BLACK→WHITE
         
         # Generate dynamic messages
         msg_gen = PopupMessageGenerator(self.ui.game_state)
@@ -2360,10 +2408,10 @@ class UIDrawing:
         
         # Render messages - center-aligned, 18px font (same as game data log)
         y = popup_rect.y + 40
-        line_spacing = 22
+        line_spacing = 26
         player_name = self.ui.game_state.current_player.user.username
-        # Use 18px font (same as game data log)
-        popup_text_font = self.ui.fonts.get('regular', {}).get(18, self.ui.font_textbox_black)
+        # Use 23px MEDIUM font (same as game data log)
+        popup_text_font = self.ui.fonts.get('medium', {}).get(23, self.ui.font_textbox_black)
         
         for i, line in enumerate(message_lines):
             # Special handling: green for player name and point values
@@ -2421,26 +2469,6 @@ class UIDrawing:
         button_text_width = self.ui.font_bigtextbar_black.size(self.format_display_text(button_text))[0]
         self.draw_text_with_font(button_text, button_rect.centerx - button_text_width // 2, button_rect.centery - 18, text_color, self.ui.font_bigtextbar_black)
 
-    def draw_x_button(self):
-        """Draw X button in upper right corner (40x40px) to return to menu"""
-        # X button position: top right corner
-        x_button_rect = pygame.Rect(1880, 0, 40, 40)
-        self.x_button_rect = x_button_rect  # Store for click detection
-        
-        # Get mouse position for hover effect
-        mouse_pos = pygame.mouse.get_pos()
-        is_hovering = x_button_rect.collidepoint(mouse_pos)
-        
-        # Draw button background
-        bg_color = self.ui.RED if is_hovering else self.ui.DARK_RED
-        pygame.draw.rect(self.ui.screen, bg_color, x_button_rect)
-        
-        # Draw X in the middle
-        text_color = self.ui.WHITE
-        x_text = self.ui.fonts['regular'][36].render("X", True, text_color)
-        x_text_rect = x_text.get_rect(center=x_button_rect.center)
-        self.ui.screen.blit(x_text, x_text_rect)
-    
     def draw_bot_chat_bubble(self, bot_name, message):
         """
         Draw bot message in a chat bubble based on bot position.
@@ -2511,7 +2539,7 @@ class UIDrawing:
         # Draw yellow label above or below bubble
         label_color = self.ui.YELLOW
         label_text = bot_name
-        label_surface = self.ui.fonts['regular'][16].render(label_text, True, label_color)
+        label_surface = self.ui.fonts['regular'][23].render(label_text, True, label_color)
         label_rect = label_surface.get_rect(center=config["label_pos"])
         self.ui.screen.blit(label_surface, label_rect)
         
@@ -2529,7 +2557,7 @@ class UIDrawing:
         # Draw text inside bubble (centered, white text)
         y_offset = bubble_rect.y + 15
         for line in lines[:2]:  # Max 2 lines
-            line_surface = self.ui.fonts['regular'][16].render(line, True, self.ui.WHITE)
+            line_surface = self.ui.fonts['regular'][23].render(line, True, self.ui.WHITE)
             line_rect = line_surface.get_rect(centerx=bubble_rect.centerx, y=y_offset)
             self.ui.screen.blit(line_surface, line_rect)
             y_offset += 20
@@ -2538,7 +2566,7 @@ class UIDrawing:
         """Split message into lines that fit within max_width"""
         lines = []
         current_line = []
-        font = self.ui.fonts['regular'][16]
+        font = self.ui.fonts['regular'][23]
         
         for word in words:
             test_line = ' '.join(current_line + [word])

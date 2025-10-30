@@ -129,15 +129,22 @@ class UIEvents:
             if end_game_rect.collidepoint(pos):
                 return
         
-        # Color buttons
-        for color, button in self.ui.color_buttons.items():
-            if button.is_clicked(pos):
-                self.ui.change_snaptray_color(color)
-                return
+        # REMOVED: Color buttons
+        # for color, button in self.ui.color_buttons.items():
+        #     if button.is_clicked(pos):
+        #         self.ui.change_snaptray_color(color)
+        #         return
 
         # BANK button (overlapping button from X:20 to X:540)
         bank_button_rect = pygame.Rect(20, 560, 520, 80)
         if bank_button_rect.collidepoint(pos):
+            # CRITICAL FIX: Don't allow banking in summary states
+            if self.ui.game_state.current_game_state in [GameStateEnum.BANKED_TURN_SUMMARY, 
+                                                          GameStateEnum.BUST_TURN_SUMMARY,
+                                                          GameStateEnum.END_GAME_SUMMARY]:
+                print("BANK button clicked - in summary state, ignoring")
+                return
+            
             if self.ui.bank_button_enabled:
                 print("BANK button clicked - enabled")
                 self.ui.game_state.referee.perform_action("BANK")
@@ -197,10 +204,10 @@ class UIEvents:
                 self.ui.game_state.referee.end_turn()
             return
         
-        # SCORING INFO button
-        if self.ui.scoring_info_button.is_clicked(pos):
-            self.ui.show_scoring_info()
-            return
+        # REMOVED: SCORING INFO button
+        # if self.ui.scoring_info_button.is_clicked(pos):
+        #     self.ui.show_scoring_info()
+        #     return
         
         # DICECUP (roll dice)
         if self.ui.dicecup_rect.collidepoint(pos) and self.ui.game_state.referee.can_roll():

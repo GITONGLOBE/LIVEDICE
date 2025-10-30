@@ -78,7 +78,7 @@ class InGameUI(UIInterface):
         self.setup_fonts()
         self.setup_game()
         self.setup_ui_components()
-        self.setup_scoring_info_button()
+        # REMOVED: self.setup_scoring_info_button()  # Old question mark button
         self.setup_rotating_image()
         
         # Setup buttons
@@ -144,16 +144,16 @@ class InGameUI(UIInterface):
             (240, 700), (310, 700), (380, 700)
         ]
 
-        # Create color change buttons
-        button_size = 30
-        spacing = 10
-        start_x = self.sections["SNAPTRAY"].right - (button_size + spacing) * 5
-        start_y = self.sections["SNAPTRAY"].bottom - button_size - spacing
-        self.color_buttons = {
-            "red": Button(start_x, start_y, button_size, button_size, "", (255, 0, 0), (255, 255, 255), (255, 0, 0), (255, 0, 0)),
-            "green": Button(start_x + button_size + spacing, start_y, button_size, button_size, "", (0, 255, 0), (255, 255, 255), (0, 255, 0), (0, 255, 0)),
-            "blue": Button(start_x + (button_size + spacing) * 2, start_y, button_size, button_size, "", (0, 0, 255), (255, 255, 255), (0, 0, 255), (0, 0, 255))
-        }
+        # REMOVED: Old debug color buttons
+        # button_size = 30
+        # spacing = 10
+        # start_x = self.sections["SNAPTRAY"].right - (button_size + spacing) * 5
+        # start_y = self.sections["SNAPTRAY"].bottom - button_size - spacing
+        # self.color_buttons = {
+        #     "red": Button(start_x, start_y, button_size, button_size, "", (255, 0, 0), (255, 255, 255), (255, 0, 0), (255, 0, 0)),
+        #     "green": Button(start_x + button_size + spacing, start_y, button_size, button_size, "", (0, 255, 0), (255, 255, 255), (0, 255, 0), (0, 255, 0)),
+        #     "blue": Button(start_x + (button_size + spacing) * 2, start_y, button_size, button_size, "", (0, 0, 255), (255, 255, 255), (0, 0, 255), (0, 0, 255))
+        # }
 
         # Initialize scrolling variables
         self.log_scroll_y = 0
@@ -270,7 +270,7 @@ class InGameUI(UIInterface):
         }
         
         # All sizes needed
-        font_sizes = [10, 12, 14, 16, 18, 20, 22, 24, 28, 36]
+        font_sizes = [10, 12, 14, 23, 18, 20, 22, 24, 28, 36]
         
         # Create fonts dictionary
         self.fonts = {}
@@ -284,16 +284,16 @@ class InGameUI(UIInterface):
         self.font_minititle_semibold = self.fonts['semi_bold'][10]
         self.font_textbox_black = self.fonts['black'][12]
         self.font_textbox_semibold = self.fonts['semi_bold'][12]
-        self.font_textbar_black = self.fonts['black'][16]
-        self.font_textbar_semibold = self.fonts['semi_bold'][16]
+        self.font_textbar_black = self.fonts['black'][23]
+        self.font_textbar_semibold = self.fonts['semi_bold'][23]
         self.font_mediumtextbar_black = self.fonts['black'][24]
         self.font_mediumtextbar_semibold = self.fonts['semi_bold'][24]
         self.font_bigtextbar_black = self.fonts['black'][36]
         self.font_bigtextbar_semibold = self.fonts['semi_bold'][36]
         
         # Legacy font references for other parts
-        self.log_font = self.fonts['regular'][18]
-        self.log_line_height = 22
+        self.log_font = self.fonts['regular'][23]
+        self.log_line_height = 26
         self.max_visible_lines = 24
 
     def setup_game(self):
@@ -301,13 +301,14 @@ class InGameUI(UIInterface):
         self.game_state = GameStateManager(self, self.human_players, self.ai_players, self.endgoal, self.ruleset, self.bot_difficulty)
         self.game_state.set_active_task("Click START TURN to begin your turn")
 
-    def setup_scoring_info_button(self):
-        """Setup scoring information button"""
-        snaptray_rect = self.sections["SNAPTRAY"]
-        button_size = 60
-        button_pos = (snaptray_rect.right - button_size - 10, snaptray_rect.bottom - button_size - 10)
-        self.scoring_info_button = Button(button_pos[0], button_pos[1], button_size, button_size, 
-                                          "?", self.WHITE, self.BLACK, self.BLACK, self.BLACK, font_size=48)
+    # REMOVED: Old question mark button setup
+    # def setup_scoring_info_button(self):
+    #     """Setup scoring information button"""
+    #     snaptray_rect = self.sections["SNAPTRAY"]
+    #     button_size = 60
+    #     button_pos = (snaptray_rect.right - button_size - 10, snaptray_rect.bottom - button_size - 10)
+    #     self.scoring_info_button = Button(button_pos[0], button_pos[1], button_size, button_size, 
+    #                                       "?", self.WHITE, self.BLACK, self.BLACK, self.BLACK, font_size=48)
 
     def setup_rotating_image(self):
         """Setup rotating image for dicecup"""
@@ -417,7 +418,7 @@ class InGameUI(UIInterface):
     
     def get_entry_height(self, entry, max_width):
         """Calculate height needed for a log entry"""
-        return UIHelpers.get_entry_height(entry, max_width, self.fonts['regular'][16])
+        return UIHelpers.get_entry_height(entry, max_width, self.fonts['regular'][23])
     
     # ========================================================================
     # DRAWING METHODS (delegate to UIDrawing)
