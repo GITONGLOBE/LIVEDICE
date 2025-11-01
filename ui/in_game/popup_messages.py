@@ -148,9 +148,9 @@ class PopupMessageGenerator:
         if not info["in_first"] and info["points_behind"] > 0:
             ahead_name = info["ahead_player"].user.username if info["ahead_player"] else "LEADER"
             variations = [
-                f"BANK {self._format_number(info['points_behind'] + 1)} POINTS TO TAKE {self._get_ordinal(info['position'] - 1)} PLACE",
-                f"{self._format_number(info['points_behind'] + 1)} POINTS NEEDED TO MOVE UP TO {self._get_ordinal(info['position'] - 1)}",
-                f"PASS {ahead_name} WITH {self._format_number(info['points_behind'] + 1)} POINTS"
+                f"BANK {self._format_number(info['points_behind'] + 50)} POINTS TO TAKE {self._get_ordinal(info['position'] - 1)} PLACE",
+                f"{self._format_number(info['points_behind'] + 50)} POINTS NEEDED TO MOVE UP TO {self._get_ordinal(info['position'] - 1)}",
+                f"PASS {ahead_name} WITH {self._format_number(info['points_behind'] + 50)} POINTS"
             ]
             return random.choice(variations)
         

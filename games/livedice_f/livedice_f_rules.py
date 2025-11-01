@@ -19,6 +19,7 @@ class GameStateEnum(Enum):
     ROLLRESULT_POSITIVE_STASHOPTIONS_NOSTASH = auto()
     ROLLRESULT_POSITIVE_STASHOPTIONS_HAVESTASHED_CURRENTROLL = auto()
     END_GAME_SUMMARY = auto()
+    FINAL_TURNS = auto()
 
 class LiveDiceFRules:
     TARGET_SCORE = 4000  # This will be displayed as 4OOO in the UI

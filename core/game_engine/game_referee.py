@@ -6,8 +6,27 @@ class GameReferee:
         self.game_state_manager = game_state_manager
 
     def update_game_state(self):
+        """
+        CRITICAL: Check game state and transitions
+        Priority order:
+        1. Check for FINAL_TURNS trigger (someone reached endgoal)
+        2. Check for END_GAME_SUMMARY (all final turns complete)
+        3. Normal game state transitions
+        """
+        # CRITICAL: Don't check final turns if already triggered
+        if not self.game_state_manager.final_turns_triggered:
+            if self.check_final_turns_trigger():
+                # Don't proceed to other checks - final turns just triggered
+                return
+        
+        # CRITICAL: Check if final turns are complete
+        if self.game_state_manager.final_turns_triggered:
+            if self.check_final_turns_complete():
+                self.set_game_state(GameStateEnum.END_GAME_SUMMARY)
+                return
+        
+        # Normal game state logic
         state_conditions = [
-            (self.is_game_over, GameStateEnum.END_GAME_SUMMARY),
             (lambda: self.bust_state, GameStateEnum.BUST_TURN_SUMMARY),
             (lambda: self.turn_banked, GameStateEnum.BANKED_TURN_SUMMARY),
             (self.referee.is_full_stash, GameStateEnum.STASHCHOICE_STASHED_FULL),
@@ -125,11 +144,15 @@ class GameReferee:
         has_stashed_this_turn = self.game_state_manager.current_player.stashed_dice_this_roll
         virtual_score = self.calculate_virtual_score()
         
+        # CRITICAL FIX: BANK not allowed when player has unstashed green dice
+        # Added ROLLRESULT_POSITIVE_STASHOPTIONS to exclusion list
+        # Player must make stashing decision (stash or skip) before banking
         return (LiveDiceFRules.can_bank(has_stashed_this_turn, virtual_score) and
                 current_state not in [GameStateEnum.BUST_TURN_SUMMARY, 
                                       GameStateEnum.BANKED_TURN_SUMMARY, 
                                       GameStateEnum.END_GAME_SUMMARY,
                                       GameStateEnum.START_TURN,
+                                      GameStateEnum.ROLLRESULT_POSITIVE_STASHOPTIONS,
                                       GameStateEnum.ROLLRESULT_POSITIVE_STASHOPTIONS_NOSTASH])
 
     def get_stash_button_text(self) -> str:
@@ -168,9 +191,41 @@ class GameReferee:
             self.game_state_manager.turn_started
         )
 
+
+    def check_final_turns_trigger(self) -> bool:
+        """Check if any player reached endgoal and trigger FINAL_TURNS state"""
+        # Only trigger once
+        if hasattr(self.game_state_manager, 'final_turns_triggered'):
+            return False
+        
+        # Check if any player reached endgoal
+        for player in self.game_state_manager.players:
+            if player.get_total_score() >= self.game_state_manager.endgoal:
+                # Mark final turns triggered
+                self.game_state_manager.final_turns_triggered = True
+                self.game_state_manager.final_turns_player = player
+                self.game_state_manager.final_turns_turn_number = player.turn_count
+                self.game_state_manager.final_turns_score = player.get_total_score()
+                
+                # Add G-REF message
+                self.game_state_manager.message_manager.add_gref_official_statement(
+                    f"FINAL TURNS! {player.user.username} HAS REACHED THE ENDGOAL!"
+                )
+                
+                return True
+        
+        return False
     def is_game_over(self) -> bool:
         player_scores = [player.get_total_score() for player in self.game_state_manager.players]
-        return LiveDiceFRules.is_game_over(player_scores, self.game_state_manager.endgoal)
+        # CRITICAL FIX: Game ends when ANY player reaches goal AND all players had equal turns
+        any_won = any(score >= self.game_state_manager.endgoal for score in player_scores)
+        if not any_won:
+            return False
+        
+        # Check if all players have had equal number of turns
+        turn_counts = [player.turn_count for player in self.game_state_manager.players]
+        all_equal_turns = len(set(turn_counts)) == 1
+        return all_equal_turns
 
     def calculate_score(self, dice_values: List[int], stashed_together: bool = False) -> int:
         return LiveDiceFRules.calculate_score(dice_values, stashed_together, self.game_state_manager.ruleset)
@@ -268,6 +323,10 @@ class GameReferee:
         self.set_game_state(GameStateEnum.BUST_TURN_SUMMARY)
 
     def bank_points(self):
+        """
+        Bank points and check if player reached endgoal.
+        CRITICAL: This is where FINAL_TURNS gets triggered!
+        """
         current_player = self.game_state_manager.current_player
         total_score = self.calculate_turn_score()
         current_player.record_turn(
@@ -282,6 +341,25 @@ class GameReferee:
             player_name=player_name,
             points=total_score
         )
+        
+        # CRITICAL: Check if player reached endgoal and trigger FINAL_TURNS
+        # This must happen AFTER banking so the score is updated
+        if current_player.get_total_score() >= self.game_state_manager.endgoal:
+            if not self.game_state_manager.final_turns_triggered:
+                # First player to reach endgoal - trigger FINAL_TURNS
+                self.game_state_manager.final_turns_triggered = True
+                self.game_state_manager.final_turns_player = current_player
+                self.game_state_manager.final_turns_turn_number = current_player.turn_count
+                self.game_state_manager.final_turns_score = current_player.get_total_score()
+                
+                # Transition to FINAL_TURNS state
+                self.set_game_state(GameStateEnum.FINAL_TURNS)
+                
+                # G-REF announces FINAL TURNS
+                self.game_state_manager.message_manager.add_gref_official_statement(
+                    f"{player_name} HAS REACHED THE ENDGOAL! FINAL TURNS BEGINNING!"
+                )
+                return
         
         self.set_game_state(GameStateEnum.BANKED_TURN_SUMMARY)
         current_player.stash_stash = 0

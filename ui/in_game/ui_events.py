@@ -117,14 +117,25 @@ class UIEvents:
                 self.ui.show_exit_confirmation = True
                 return
         
-        # END GAME SUMMARY popup - RESTART GAME button
+        # END GAME SUMMARY popup - Button handling
         if self.ui.game_state.current_game_state == GameStateEnum.END_GAME_SUMMARY:
+            # RESTART GAME button
             if hasattr(self.ui, 'restart_game_button_rect'):
                 if self.ui.restart_game_button_rect.collidepoint(pos):
-                    print("RESTART GAME clicked - returning to startup menu")
+                    print("RESTART GAME clicked - restarting with same settings")
+                    # Set flags for main.py to handle restart
+                    self.ui.restart_with_same_settings = True
                     self.ui.return_to_menu = True
                     return
-            # Click anywhere on end game popup to continue (for now)
+            
+            # BACK TO MENU button
+            if hasattr(self.ui, 'back_to_menu_button_rect'):
+                if self.ui.back_to_menu_button_rect.collidepoint(pos):
+                    print("BACK TO MENU clicked - returning to startup menu")
+                    self.ui.return_to_menu = True
+                    return
+            
+            # Click anywhere else on popup - ignore (removed auto-continue)
             end_game_rect = self.ui.sections["END_GAME_SUMMARY_POPUP"]
             if end_game_rect.collidepoint(pos):
                 return

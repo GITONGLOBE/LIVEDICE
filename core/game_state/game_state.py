@@ -107,6 +107,14 @@ class GameStateManager:
         self.current_turn_number = 1
         self.ui_needs_update = False
         self.can_roll_once = False
+        
+        # CRITICAL FIX: Initialize final_turns tracking variables
+        # These track when a player reaches the endgoal and trigger final rounds
+        self.final_turns_triggered = False
+        self.final_turns_player = None
+        self.final_turns_turn_number = 0
+        self.final_turns_score = 0
+        # CRITICAL: Do NOT reset final_turns variables after initialization - they persist until game ends!
 
         # Add human players
         for i in range(human_players):
@@ -153,6 +161,7 @@ class GameStateManager:
         self.busted_player = None
         self.busted_lost_score = 0
         self.can_roll_once = False
+        # CRITICAL: Do NOT reset final_turns variables - they persist until game ends!
         # FIXED: Update counters so new player's turn number shows immediately
         self.real_time_counters.update_counters(self)
 
@@ -329,6 +338,18 @@ class GameStateManager:
         stash_points = self.referee.calculate_stash_score()
         self.current_player.stash_stash += stash_points
         self.current_player.full_stashes_moved_this_turn += 1
+        
+        # CRITICAL FIX: Add G-REF message for STASHSTASH move
+        player_name = self.current_player.user.username
+        self.message_manager.add_gref_official_statement(
+            f"{player_name} MOVED FULL STASH TO STASH STASH FOR {stash_points} POINTS! ROLLING ALL 6 DICE AGAIN!"
+        )
+        
+        # CRITICAL FIX: Add G-REF message for STASHSTASH move
+        player_name = self.current_player.user.username
+        self.message_manager.add_gref_official_statement(
+            f"{player_name} MOVED FULL STASH TO STASH STASH FOR {stash_points} POINTS! ROLLING ALL 6 DICE AGAIN!"
+        )
         self.current_player.stashed_dice = []
         self.current_player.stashed_dice_scores = []
         self.current_player.stashes_this_turn = 0

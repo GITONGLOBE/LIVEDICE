@@ -54,6 +54,30 @@ class BotAI:
         dice_values = self.game_state.dice_values
         stashable = self.game_state.referee.get_stashable_dice(dice_values)
         
+        # CRITICAL FIX: NORMAL/HARD bots ALWAYS take optimal STASHSTASH move
+        bot_difficulty = self.game_state.bot_difficulty
+        if bot_difficulty in ["NORMAL", "HARD"]:
+            if len(stashable) == len(dice_values):
+                current_stash_count = len(self.game_state.current_player.stashed_dice)
+                if current_stash_count + len(stashable) == 6:
+                    self.thinking_message = "ALL DICE GREEN! OPTIMAL STASHSTASH MOVE!"
+                    self.game_state.selected_dice = stashable.copy()
+                    return "STASH"
+        
+        # CRITICAL FIX: NORMAL/HARD bots ALWAYS take optimal STASHSTASH move
+        # When all dice are stashable AND fills stash = free reroll with all 6 dice
+        bot_difficulty = self.game_state.bot_difficulty
+        if bot_difficulty in ["NORMAL", "HARD"]:
+            # Check if all dice are stashable
+            if len(stashable) == len(dice_values):
+                # Check if stashing all would fill the stash
+                current_stash_count = len(self.game_state.current_player.stashed_dice)
+                if current_stash_count + len(stashable) == 6:
+                    # OPTIMAL MOVE: Stash all -> STASHSTASH -> reroll all 6 dice
+                    self.thinking_message = "ALL DICE GREEN! FILLING STASH FOR STASHSTASH - OPTIMAL MOVE!"
+                    self.game_state.selected_dice = stashable.copy()
+                    return "STASH"
+        
         # Analyze dice values
         ones = [i for i in stashable if dice_values[i] == 1]
         fives = [i for i in stashable if dice_values[i] == 5]

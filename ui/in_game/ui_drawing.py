@@ -45,6 +45,12 @@ class UIDrawing:
         # PERFORMANCE: Message rendering cache
         self.message_cache = {}  # {message_id: (surface, width, height, is_left)}
         self.last_message_count = 0
+        
+        # CRITICAL FIX: Cache popup message generator
+        self.popup_message_generator = None
+        
+        # CRITICAL FIX: Create popup message generator once (cache persists between frames)
+        self.popup_message_generator = None
     
     @staticmethod
     def format_display_text(text: str) -> str:
@@ -96,9 +102,18 @@ class UIDrawing:
         right_sidebar = pygame.Rect(460, 0, 20, 1080)
         pygame.draw.rect(self.ui.screen, self.ui.DARKER_RED, right_sidebar)
  
-        # Draw the snaptray overlay
+        # Draw the snaptray overlay (switch image for FINAL_TURNS)
         snaptray_rect = self.ui.sections["SNAPTRAY"]
-        self.ui.screen.blit(self.ui.snaptray_overlay, snaptray_rect.topleft)
+        if self.ui.game_state.current_game_state == GameStateEnum.FINAL_TURNS:
+            # Use final turns background
+            if hasattr(self.ui, 'snaptray_final_turns_overlay'):
+                self.ui.screen.blit(self.ui.snaptray_final_turns_overlay, snaptray_rect.topleft)
+            else:
+                # Fallback to normal overlay if final turns image not loaded
+                self.ui.screen.blit(self.ui.snaptray_overlay, snaptray_rect.topleft)
+        else:
+            # Normal gameplay background
+            self.ui.screen.blit(self.ui.snaptray_overlay, snaptray_rect.topleft)
 
         # Draw all left panel sections (FIXED: use self.draw_* not self.ui.draw_*)
         self.draw_game_info()
@@ -123,6 +138,12 @@ class UIDrawing:
         # Show exit confirmation popup if requested (HIGHEST PRIORITY)
         if hasattr(self.ui, 'show_exit_confirmation') and self.ui.show_exit_confirmation:
             self.draw_exit_confirmation_popup()
+        # Show final turns banner if in final turns state
+        elif self.ui.game_state.current_game_state == GameStateEnum.FINAL_TURNS:
+            self.draw_final_turns_banner()
+        # Show final turns banner if in final turns state
+        elif self.ui.game_state.current_game_state == GameStateEnum.FINAL_TURNS:
+            self.draw_final_turns_banner()
         # Show end game popup if game is over
         elif self.ui.game_state.current_game_state == GameStateEnum.END_GAME_SUMMARY:
             self.draw_end_game_summary_popup()
@@ -1301,7 +1322,8 @@ class UIDrawing:
         )
         
         # Calculate dimensions - FIXED: properly calculate height for each line
-        line_height = text_font.get_height()
+        # CRITICAL FIX: Account for bold font height (used for green highlights)
+        line_height = max(text_font.get_height(), text_font_bold.get_height())
         
         # CRITICAL FIX: Calculate actual height needed for each line (dice are 36px tall)
         total_text_height = 0
@@ -1324,12 +1346,14 @@ class UIDrawing:
             for part_type, part_value in line_parts:
                 if part_type == 'dice':
                     line_width += DICE_SIZE + DICE_SPACING
-                elif part_type in ['text', 'player', 'points']:
-                    font = text_font_bold if part_type in ['player', 'points'] else text_font
+                elif part_type in ['text', 'player', 'points', 'action']:  # CRITICAL FIX: Added 'action'
+                    font = text_font_bold if part_type in ['player', 'points', 'action'] else text_font
                     line_width += font.size(part_value)[0]
             max_line_width = max(max_line_width, line_width)
         
-        balloon_width = max(MIN_WIDTH, min(MAX_WIDTH, max_line_width + TEXT_PAD_LEFT + TEXT_PAD_RIGHT + ARROW_WIDTH))
+        balloon_width = max(MIN_WIDTH, max_line_width + TEXT_PAD_LEFT + TEXT_PAD_RIGHT + ARROW_WIDTH)
+        # CRITICAL FIX: Removed min(MAX_WIDTH, ...) cap to allow balloon to expand for long words
+        # The balloon will now automatically size to fit content, even if it exceeds 370px
         
         total_height = NAME_BAR_HEIGHT + text_block_height
         total_width = balloon_width
@@ -1844,6 +1868,142 @@ class UIDrawing:
 
 
 
+
+    def draw_final_turns_banner(self):
+        """
+        Draw FINAL TURNS banner in lower left corner.
+        Shows when game state is FINAL_TURNS.
+        """
+        if self.ui.game_state.current_game_state != GameStateEnum.FINAL_TURNS:
+            return
+        
+        # Banner position: lower left corner
+        banner_x = 20
+        banner_y = 880  # Lower left area
+        banner_width = 440
+        banner_height = 180
+        
+        # Background - semi-transparent dark overlay
+        banner_surface = pygame.Surface((banner_width, banner_height))
+        banner_surface.set_alpha(220)  # Semi-transparent
+        banner_surface.fill((0, 0, 0))  # Black background
+        self.ui.screen.blit(banner_surface, (banner_x, banner_y))
+        
+        # Border
+        pygame.draw.rect(self.ui.screen, self.ui.RED, 
+                        pygame.Rect(banner_x, banner_y, banner_width, banner_height), 3)
+        
+        y_offset = banner_y + 15
+        
+        # Title: "FINAL TURNS!"
+        title = "FINAL TURNS!"
+        title_width = self.ui.font_bigtextbar_black.size(self.format_display_text(title))[0]
+        self.draw_text_with_font(title, banner_x + (banner_width - title_width) // 2, y_offset,
+                                self.ui.RED, self.ui.font_bigtextbar_black)
+        y_offset += 45
+        
+        # Player info
+        player_name = self.ui.game_state.final_turns_player.user.username
+        turn_num = self.ui.game_state.final_turns_turn_number
+        points = self.ui.game_state.final_turns_score
+        
+        # Line 1: "[PLAYER] HAS REACHED THE ENDGOAL"
+        line1 = f"{player_name} HAS REACHED"
+        self.draw_text_with_font(line1, banner_x + 15, y_offset,
+                                self.ui.GREEN, self.ui.font_textbox_black)
+        y_offset += 25
+        
+        # Line 2: "THE ENDGOAL IN [X] TURNS"
+        line2 = f"THE ENDGOAL IN {self.ui.format_number(turn_num)} TURNS"
+        self.draw_text_with_font(line2, banner_x + 15, y_offset,
+                                self.ui.WHITE, self.ui.fonts.get("medium", {}).get(12, self.ui.font_textbox_semibold))
+        y_offset += 25
+        
+        # Line 3: "THEY HAVE [X] POINTS"
+        line3 = f"THEY HAVE {self.ui.format_number(points)} POINTS"
+        self.draw_text_with_font(line3, banner_x + 15, y_offset,
+                                self.ui.WHITE, self.ui.fonts.get("medium", {}).get(12, self.ui.font_textbox_semibold))
+        y_offset += 30
+        
+        # Line 4: "ALL PLAYERS WITH LESS THAN [X] TURNS"
+        line4 = f"ALL PLAYERS WITH LESS THAN {self.ui.format_number(turn_num)} TURNS"
+        self.draw_text_with_font(line4, banner_x + 15, y_offset,
+                                self.ui.CYAN, self.ui.fonts.get("medium", {}).get(12, self.ui.font_textbox_semibold))
+        y_offset += 25
+        
+        # Line 5: "GET TO PLAY THEIR FINAL TURN"
+        line5 = "GET TO PLAY THEIR FINAL TURN"
+        self.draw_text_with_font(line5, banner_x + 15, y_offset,
+                                self.ui.CYAN, self.ui.fonts.get("medium", {}).get(12, self.ui.font_textbox_semibold))
+
+
+    def draw_final_turns_banner(self):
+        """
+        Draw FINAL TURNS banner in lower left corner.
+        Shows when game state is FINAL_TURNS.
+        """
+        if self.ui.game_state.current_game_state != GameStateEnum.FINAL_TURNS:
+            return
+        
+        # Banner position: lower left corner
+        banner_x = 20
+        banner_y = 880  # Lower left area
+        banner_width = 440
+        banner_height = 180
+        
+        # Background - semi-transparent dark overlay
+        banner_surface = pygame.Surface((banner_width, banner_height))
+        banner_surface.set_alpha(220)  # Semi-transparent
+        banner_surface.fill((0, 0, 0))  # Black background
+        self.ui.screen.blit(banner_surface, (banner_x, banner_y))
+        
+        # Border
+        pygame.draw.rect(self.ui.screen, self.ui.RED, 
+                        pygame.Rect(banner_x, banner_y, banner_width, banner_height), 3)
+        
+        y_offset = banner_y + 15
+        
+        # Title: "FINAL TURNS!"
+        title = "FINAL TURNS!"
+        title_width = self.ui.font_bigtextbar_black.size(self.format_display_text(title))[0]
+        self.draw_text_with_font(title, banner_x + (banner_width - title_width) // 2, y_offset,
+                                self.ui.RED, self.ui.font_bigtextbar_black)
+        y_offset += 45
+        
+        # Player info
+        player_name = self.ui.game_state.final_turns_player.user.username
+        turn_num = self.ui.game_state.final_turns_turn_number
+        points = self.ui.game_state.final_turns_score
+        
+        # Line 1: "[PLAYER] HAS REACHED THE ENDGOAL"
+        line1 = f"{player_name} HAS REACHED"
+        self.draw_text_with_font(line1, banner_x + 15, y_offset,
+                                self.ui.GREEN, self.ui.font_textbox_black)
+        y_offset += 25
+        
+        # Line 2: "THE ENDGOAL IN [X] TURNS"
+        line2 = f"THE ENDGOAL IN {self.ui.format_number(turn_num)} TURNS"
+        self.draw_text_with_font(line2, banner_x + 15, y_offset,
+                                self.ui.WHITE, self.ui.fonts.get("medium", {}).get(12, self.ui.font_textbox_semibold))
+        y_offset += 25
+        
+        # Line 3: "THEY HAVE [X] POINTS"
+        line3 = f"THEY HAVE {self.ui.format_number(points)} POINTS"
+        self.draw_text_with_font(line3, banner_x + 15, y_offset,
+                                self.ui.WHITE, self.ui.fonts.get("medium", {}).get(12, self.ui.font_textbox_semibold))
+        y_offset += 30
+        
+        # Line 4: "ALL PLAYERS WITH LESS THAN [X] TURNS"
+        line4 = f"ALL PLAYERS WITH LESS THAN {self.ui.format_number(turn_num)} TURNS"
+        self.draw_text_with_font(line4, banner_x + 15, y_offset,
+                                self.ui.CYAN, self.ui.fonts.get("medium", {}).get(12, self.ui.font_textbox_semibold))
+        y_offset += 25
+        
+        # Line 5: "GET TO PLAY THEIR FINAL TURN"
+        line5 = "GET TO PLAY THEIR FINAL TURN"
+        self.draw_text_with_font(line5, banner_x + 15, y_offset,
+                                self.ui.CYAN, self.ui.fonts.get("medium", {}).get(12, self.ui.font_textbox_semibold))
+
     def draw_end_game_summary_popup(self):
         """
         Draw end game summary popup showing final rankings.
@@ -1933,20 +2093,57 @@ class UIDrawing:
                 self.draw_text_with_font(points, x, y, self.ui.WHITE, self.ui.font_textbar_black)
                 y += 35
         
-        # RESTART GAME button at bottom
-        button_rect = pygame.Rect(popup_rect.centerx - 200, popup_rect.bottom - 100, 400, 80)
-        is_hovering = button_rect.collidepoint(mouse_pos)
-        button_color = self.ui.RED if is_hovering else self.ui.GREEN
-        pygame.draw.rect(self.ui.screen, button_color, button_rect)
+        # Two buttons at bottom: RESTART GAME and BACK TO MENU
+        button_width = 280
+        button_height = 70
+        button_spacing = 20
+        button_y = popup_rect.bottom - 90
         
-        button_text = "RESTART GAME"
-        button_text_width = self.ui.font_bigtextbar_black.size(self.format_display_text(button_text))[0]
-        self.draw_text_with_font(button_text, button_rect.centerx - button_text_width // 2,
-                                button_rect.centery - 18, self.ui.BLACK if not is_hovering else self.ui.WHITE,
-                                self.ui.font_bigtextbar_black)
+        # RESTART GAME button (left)
+        restart_rect = pygame.Rect(
+            popup_rect.centerx - button_width - button_spacing // 2,
+            button_y,
+            button_width,
+            button_height
+        )
+        is_hovering_restart = restart_rect.collidepoint(mouse_pos)
+        restart_color = self.ui.RED if is_hovering_restart else self.ui.GREEN
+        pygame.draw.rect(self.ui.screen, restart_color, restart_rect)
         
-        # Store button rect for click handling
-        self.ui.restart_game_button_rect = button_rect
+        restart_text = "RESTART GAME"
+        restart_text_width = self.ui.font_mediumtextbar_black.size(self.format_display_text(restart_text))[0]
+        self.draw_text_with_font(
+            restart_text,
+            restart_rect.centerx - restart_text_width // 2,
+            restart_rect.centery - 15,
+            self.ui.BLACK if not is_hovering_restart else self.ui.WHITE,
+            self.ui.font_mediumtextbar_black
+        )
+        
+        # BACK TO MENU button (right)
+        menu_rect = pygame.Rect(
+            popup_rect.centerx + button_spacing // 2,
+            button_y,
+            button_width,
+            button_height
+        )
+        is_hovering_menu = menu_rect.collidepoint(mouse_pos)
+        menu_color = self.ui.RED if is_hovering_menu else self.ui.BLUE
+        pygame.draw.rect(self.ui.screen, menu_color, menu_rect)
+        
+        menu_text = "BACK TO MENU"
+        menu_text_width = self.ui.font_mediumtextbar_black.size(self.format_display_text(menu_text))[0]
+        self.draw_text_with_font(
+            menu_text,
+            menu_rect.centerx - menu_text_width // 2,
+            menu_rect.centery - 15,
+            self.ui.BLACK if not is_hovering_menu else self.ui.WHITE,
+            self.ui.font_mediumtextbar_black
+        )
+        
+        # Store button rects for click handling
+        self.ui.restart_game_button_rect = restart_rect
+        self.ui.back_to_menu_button_rect = menu_rect
 
     def draw_exit_confirmation_popup(self):
         """
@@ -2205,8 +2402,10 @@ class UIDrawing:
         self.draw_text_with_font(text, popup_rect.x + 10, popup_rect.y + 5, self.ui.WHITE, self.ui.font_minititle_black)  # CHANGED: BLACK→WHITE
         
         # Generate dynamic messages
-        msg_gen = PopupMessageGenerator(self.ui.game_state)
-        message_lines = msg_gen.generate_ready_up_messages()
+        # CRITICAL FIX: Use cached generator to prevent text glitching
+        if self.popup_message_generator is None:
+            self.popup_message_generator = PopupMessageGenerator(self.ui.game_state)
+        message_lines = self.popup_message_generator.generate_ready_up_messages()
         
         # Main body (dark blue background)
         main_body = pygame.Rect(popup_rect.x, popup_rect.y + 20, popup_rect.width, popup_rect.height - 100)
@@ -2219,7 +2418,35 @@ class UIDrawing:
         # Use 23px MEDIUM font (same as game data log)
         popup_text_font = self.ui.fonts.get('medium', {}).get(23, self.ui.font_textbox_black)
         
-        for i, line in enumerate(message_lines):
+        # CRITICAL FIX: Wrap long lines before rendering
+        wrapped_message_lines = []
+        max_line_width = popup_rect.width - 40  # Leave margins
+        
+        for line in message_lines:
+            # Check if line fits
+            line_width = popup_text_font.size(self.format_display_text(line))[0]
+            if line_width <= max_line_width:
+                wrapped_message_lines.append(line)
+            else:
+                # Word wrap the line
+                words = line.split()
+                current_line = []
+                current_width = 0
+                
+                for word in words:
+                    word_width = popup_text_font.size(self.format_display_text(word + " "))[0]
+                    if current_width + word_width > max_line_width and current_line:
+                        wrapped_message_lines.append(" ".join(current_line))
+                        current_line = [word]
+                        current_width = word_width
+                    else:
+                        current_line.append(word)
+                        current_width += word_width
+                
+                if current_line:
+                    wrapped_message_lines.append(" ".join(current_line))
+        
+        for i, line in enumerate(wrapped_message_lines):
             # Special handling: green for player name, white for everything else
             # Check if line contains player name
             if player_name in line:
@@ -2242,9 +2469,11 @@ class UIDrawing:
                         self.draw_text_with_font(part, x, y, self.ui.WHITE, popup_text_font)
                         x += popup_text_font.size(self.format_display_text(part))[0]
                     if j < len(parts) - 1:
-                        # Render player name in green
-                        self.draw_text_with_font(player_name, x, y, self.ui.GREEN, popup_text_font)
-                        x += popup_text_font.size(self.format_display_text(player_name))[0]
+                        # Render player name in green with BLACK font
+                        # CRITICAL FIX: Use 23px BLACK font for green player names
+                        player_name_font = self.ui.fonts.get('black', {}).get(23, self.ui.font_textbox_black)
+                        self.draw_text_with_font(player_name, x, y, self.ui.GREEN, player_name_font)
+                        x += player_name_font.size(self.format_display_text(player_name))[0]
             
             # Check if line contains point values (numbers followed by "POINTS")
             elif "POINTS" in line:
@@ -2254,10 +2483,22 @@ class UIDrawing:
                 x = popup_rect.centerx - total_width // 2
                 
                 for word in words:
-                    # Check if word is a number (contains digits) or is a place ranking (1ST, 2ND, etc.)
-                    is_number = any(c.isdigit() or c == 'O' for c in word) and not word.startswith('@')
-                    color = self.ui.GREEN if is_number else self.ui.WHITE
-                    font = popup_text_font if not is_number else popup_text_font
+                    # Check if word is point-related (number, POINTS, parentheses, etc.)
+                    is_point_text = (
+                        any(c.isdigit() or c == 'O' for c in word) or
+                        word == "POINTS" or word == "POINT" or
+                        "(" in word or ")" in word or
+                        word.upper() in ["LIKE", "AMOUNT", "ANY"]
+                    ) and not word.startswith('@')
+                    
+                    # Use GREEN + BLACK font for all point-related text
+                    # CRITICAL FIX: Use 23px BLACK font, not 12px
+                    if is_point_text:
+                        color = self.ui.GREEN
+                        font = self.ui.fonts.get('black', {}).get(23, self.ui.font_textbox_black)  # BLACK 23px variant
+                    else:
+                        color = self.ui.WHITE
+                        font = popup_text_font
                     
                     self.draw_text_with_font(word, x, y, color, font)
                     x += popup_text_font.size(self.format_display_text(word + " "))[0]
@@ -2306,8 +2547,10 @@ class UIDrawing:
         self.draw_text_with_font(text, popup_rect.x + 10, popup_rect.y + 5, self.ui.WHITE, self.ui.font_minititle_black)  # CHANGED: BLACK→WHITE
         
         # Generate messages
-        msg_gen = PopupMessageGenerator(self.ui.game_state)
-        message_lines = msg_gen.generate_bust_messages()
+        # CRITICAL FIX: Use cached generator
+        if self.popup_message_generator is None:
+            self.popup_message_generator = PopupMessageGenerator(self.ui.game_state)
+        message_lines = self.popup_message_generator.generate_bust_messages()
         
         # Main body (dark red background)
         main_body = pygame.Rect(popup_rect.x, popup_rect.y + 20, popup_rect.width, popup_rect.height - 100)
@@ -2320,7 +2563,35 @@ class UIDrawing:
         # Use 23px MEDIUM font (same as game data log)
         popup_text_font = self.ui.fonts.get('medium', {}).get(23, self.ui.font_textbox_black)
         
-        for i, line in enumerate(message_lines):
+        # CRITICAL FIX: Wrap long lines before rendering
+        wrapped_message_lines = []
+        max_line_width = popup_rect.width - 40  # Leave margins
+        
+        for line in message_lines:
+            # Check if line fits
+            line_width = popup_text_font.size(self.format_display_text(line))[0]
+            if line_width <= max_line_width:
+                wrapped_message_lines.append(line)
+            else:
+                # Word wrap the line
+                words = line.split()
+                current_line = []
+                current_width = 0
+                
+                for word in words:
+                    word_width = popup_text_font.size(self.format_display_text(word + " "))[0]
+                    if current_width + word_width > max_line_width and current_line:
+                        wrapped_message_lines.append(" ".join(current_line))
+                        current_line = [word]
+                        current_width = word_width
+                    else:
+                        current_line.append(word)
+                        current_width += word_width
+                
+                if current_line:
+                    wrapped_message_lines.append(" ".join(current_line))
+        
+        for i, line in enumerate(wrapped_message_lines):
             # Special handling: green for player name and point values
             if player_name in line:
                 # Player name in green
@@ -2338,8 +2609,10 @@ class UIDrawing:
                         self.draw_text_with_font(part, x, y, self.ui.WHITE, popup_text_font)
                         x += popup_text_font.size(self.format_display_text(part))[0]
                     if j < len(parts) - 1:
-                        self.draw_text_with_font(player_name, x, y, self.ui.GREEN, popup_text_font)
-                        x += popup_text_font.size(self.format_display_text(player_name))[0]
+                        # CRITICAL FIX: Use 23px BLACK font for green player names
+                        player_name_font = self.ui.fonts.get('black', {}).get(23, self.ui.font_textbox_black)
+                        self.draw_text_with_font(player_name, x, y, self.ui.GREEN, player_name_font)
+                        x += player_name_font.size(self.format_display_text(player_name))[0]
             
             # Check if line contains "LOSING X POINTS" - make number green
             elif "POINTS" in line and "LOSING" in line:
@@ -2350,9 +2623,15 @@ class UIDrawing:
                 for word in words:
                     # Check if word is a number
                     is_number = any(c.isdigit() or c == 'O' for c in word) and word not in ["LOSING", "POINTS"]
-                    color = self.ui.GREEN if is_number else self.ui.WHITE
+                    # CRITICAL FIX: Use 23px BLACK font for green numbers
+                    if is_number:
+                        color = self.ui.GREEN
+                        font = self.ui.fonts.get('black', {}).get(23, self.ui.font_textbox_black)
+                    else:
+                        color = self.ui.WHITE
+                        font = popup_text_font
                     
-                    self.draw_text_with_font(word, x, y, color, popup_text_font)
+                    self.draw_text_with_font(word, x, y, color, font)
                     x += popup_text_font.size(self.format_display_text(word + " "))[0]
             
             else:
@@ -2399,8 +2678,10 @@ class UIDrawing:
         self.draw_text_with_font(text, popup_rect.x + 10, popup_rect.y + 5, self.ui.WHITE, self.ui.font_minititle_black)  # CHANGED: BLACK→WHITE
         
         # Generate dynamic messages
-        msg_gen = PopupMessageGenerator(self.ui.game_state)
-        message_lines = msg_gen.generate_banked_messages()
+        # CRITICAL FIX: Use cached generator
+        if self.popup_message_generator is None:
+            self.popup_message_generator = PopupMessageGenerator(self.ui.game_state)
+        message_lines = self.popup_message_generator.generate_banked_messages()
         
         # Main body (dark green background)
         main_body = pygame.Rect(popup_rect.x, popup_rect.y + 20, popup_rect.width, popup_rect.height - 100)
@@ -2431,8 +2712,10 @@ class UIDrawing:
                         self.draw_text_with_font(part, x, y, self.ui.WHITE, popup_text_font)
                         x += popup_text_font.size(self.format_display_text(part))[0]
                     if j < len(parts) - 1:
-                        self.draw_text_with_font(player_name, x, y, self.ui.GREEN, popup_text_font)
-                        x += popup_text_font.size(self.format_display_text(player_name))[0]
+                        # CRITICAL FIX: Use 23px BLACK font for green player names
+                        player_name_font = self.ui.fonts.get('black', {}).get(23, self.ui.font_textbox_black)
+                        self.draw_text_with_font(player_name, x, y, self.ui.GREEN, player_name_font)
+                        x += player_name_font.size(self.format_display_text(player_name))[0]
             
             # Check if line contains "POINTS" or place rankings - make numbers green
             elif "POINTS" in line or "PLACE" in line or "POSITION" in line or "1ST" in line or "2ND" in line or "3RD" in line:
@@ -2444,8 +2727,13 @@ class UIDrawing:
                     # Check if word is a number or place ranking (contains digits or O, or ends with ST/ND/RD/TH)
                     is_number = (any(c.isdigit() or c == 'O' for c in word) and not word.startswith('@')) or \
                                word.endswith('ST') or word.endswith('ND') or word.endswith('RD') or word.endswith('TH')
-                    color = self.ui.GREEN if is_number else self.ui.WHITE
-                    font = popup_text_font
+                    # CRITICAL FIX: Use 23px BLACK font for green numbers and rankings
+                    if is_number:
+                        color = self.ui.GREEN
+                        font = self.ui.fonts.get('black', {}).get(23, self.ui.font_textbox_black)
+                    else:
+                        color = self.ui.WHITE
+                        font = popup_text_font
                     
                     self.draw_text_with_font(word, x, y, color, font)
                     x += popup_text_font.size(self.format_display_text(word + " "))[0]

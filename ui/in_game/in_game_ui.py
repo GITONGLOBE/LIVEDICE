@@ -117,6 +117,36 @@ class InGameUI(UIInterface):
             "green": pygame.image.load(os.path.join("assets", "snaptray_lineart_green.png")).convert_alpha()
         }
         self.snaptray_overlay = self.snaptray_images["red"]
+        
+        # Load final turns background (try both .jpg and .png)
+        try:
+            self.snaptray_final_turns_overlay = pygame.image.load(
+                os.path.join("assets", "snaptray-lineart-lastturn.jpg")
+            ).convert_alpha()
+        except:
+            try:
+                self.snaptray_final_turns_overlay = pygame.image.load(
+                    os.path.join("assets", "snaptray-lineart-lastturn.png")
+                ).convert_alpha()
+            except:
+                print("WARNING: Could not load final turns background image")
+                print("         Using normal background as fallback")
+                self.snaptray_final_turns_overlay = self.snaptray_images["red"]
+        
+        # Load final turns background (try both .jpg and .png)
+        try:
+            self.snaptray_final_turns_overlay = pygame.image.load(
+                os.path.join("assets", "snaptray-lineart-lastturn.jpg")
+            ).convert_alpha()
+        except:
+            try:
+                self.snaptray_final_turns_overlay = pygame.image.load(
+                    os.path.join("assets", "snaptray-lineart-lastturn.png")
+                ).convert_alpha()
+            except:
+                print("WARNING: Could not load final turns background image")
+                print("         Using normal background as fallback")
+                self.snaptray_final_turns_overlay = self.snaptray_images["red"]
 
         # Load stash plank images
         self.stashplank_images = {
@@ -166,6 +196,10 @@ class InGameUI(UIInterface):
         # Return to menu flag (for X button)
         self.return_to_menu = False
         self.show_exit_confirmation = False  # Flag for exit confirmation popup
+        # Restart game flag (for RESTART GAME button)
+        self.restart_with_same_settings = False
+        # Restart game flag (for RESTART GAME button)
+        self.restart_with_same_settings = False
         # Dice rectangles for click detection
         self.dice_rects = []
     

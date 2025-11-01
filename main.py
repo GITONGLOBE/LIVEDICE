@@ -110,9 +110,19 @@ def main():
         print()
         GameRunner.run_game(in_game_ui)
         
-        # Game ended - check if we should return to menu or quit
+        # Game ended - check if we should restart, return to menu, or quit
         if hasattr(in_game_ui, 'return_to_menu') and in_game_ui.return_to_menu:
-            print("Returning to startup menu...")
+            # Check if this is a restart with same settings
+            if hasattr(in_game_ui, 'restart_with_same_settings') and in_game_ui.restart_with_same_settings:
+                print()
+                print("=" * 60)
+                print("🔄 RESTARTING GAME WITH SAME SETTINGS")
+                print("=" * 60)
+                print()
+                # Loop back but keep the same configuration
+                # The variables are already set, so next iteration will use them
+            else:
+                print("Returning to startup menu...")
             # Loop back to start of while True
         else:
             # Game ended normally (window closed)
